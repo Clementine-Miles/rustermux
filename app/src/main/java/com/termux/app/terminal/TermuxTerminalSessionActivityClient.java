@@ -7,7 +7,6 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Typeface;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.text.TextUtils;
@@ -22,7 +21,6 @@ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.app.TermuxActivity;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
@@ -32,15 +30,13 @@ import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import com.termux.terminal.TextStyle;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.util.Properties;
+import java.util.Arrays;
 
 /** The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its interface methods. */
 public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionClientBase {
 
     private final TermuxActivity mActivity;
+    private final TerminalAppearance mAppearance;
 
     private static final int MAX_SESSIONS = 8;
 
@@ -52,14 +48,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
         this.mActivity = activity;
+        this.mAppearance = new TerminalAppearance(activity, activity.getPreferences().getSharedPreferences());
     }
 
-    /**
-     * Should be called when mActivity.onCreate() is called
-     */
-    public void onCreate() {
-        // Set terminal fonts and colors
+    /** Apply the initial appearance before attaching or creating a terminal session. */
+    public void onServiceConnected() {
         checkForFontAndColors();
+    }
+
+    /** Refresh settings after the new session is attached without recreating the activity. */
+    public void onSessionCreated() {
+        if (mActivity.isVisible()) mActivity.reloadActivityStyling(false);
     }
 
     /**
@@ -491,30 +490,41 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
 
-    public void checkForFontAndColors() {
-        try {
-            File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
-            File fontFile = TermuxConstants.TERMUX_FONT_FILE;
+    public void showAppearanceDialog() {
+        mAppearance.showDialog(this::checkForColors, this::checkForFont);
+    }
 
-            final Properties props = new Properties();
-            if (colorsFile.isFile()) {
-                try (InputStream in = new FileInputStream(colorsFile)) {
-                    props.load(in);
+    private void checkForFontAndColors() {
+        checkForColors();
+        checkForFont();
+    }
+
+    private void checkForColors() {
+        int[] previousColors = TerminalColors.COLOR_SCHEME.mDefaultColors.clone();
+        mAppearance.applyColorScheme(TerminalColors.COLOR_SCHEME);
+
+        TerminalSession currentSession = mActivity.getCurrentSession();
+        resetSessionColors(currentSession);
+        TermuxService service = mActivity.getTermuxService();
+        if (service != null && !Arrays.equals(previousColors, TerminalColors.COLOR_SCHEME.mDefaultColors)) {
+            synchronized (service) {
+                for (TermuxSession session : service.getTermuxSessions()) {
+                    TerminalSession terminalSession = session.getTerminalSession();
+                    if (terminalSession != currentSession) resetSessionColors(terminalSession);
                 }
             }
-
-            TerminalColors.COLOR_SCHEME.updateWith(props);
-            TerminalSession session = mActivity.getCurrentSession();
-            if (session != null && session.getEmulator() != null) {
-                session.getEmulator().mColors.reset();
-            }
-            updateBackgroundColor();
-
-            final Typeface newTypeface = (fontFile.exists() && fontFile.length() > 0) ? Typeface.createFromFile(fontFile) : Typeface.MONOSPACE;
-            mActivity.getTerminalView().setTypeface(newTypeface);
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Error in checkForFontAndColors()", e);
         }
+
+        updateBackgroundColor();
+        mActivity.getTerminalView().invalidate();
+    }
+
+    private void checkForFont() {
+        mActivity.getTerminalView().setTypeface(mAppearance.loadFont());
+    }
+
+    private static void resetSessionColors(@Nullable TerminalSession session) {
+        if (session != null && session.getEmulator() != null) session.getEmulator().mColors.reset();
     }
 
     public void updateBackgroundColor() {

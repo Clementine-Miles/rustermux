@@ -45,7 +45,6 @@ import java.util.List;
  *          `TERMUX_API_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`
  *          `TERMUX_BOOT_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
  *          `TERMUX_FLOAT_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
- *          `TERMUX_STYLING_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
  *          `TERMUX_TASKER_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
  *          `TERMUX_WIDGET_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`.
  *
@@ -101,7 +100,6 @@ import java.util.List;
  *          `TERMUX_API_GITHUB_REPO_NAME`,`TERMUX_API_GITHUB_REPO_URL`, `TERMUX_API_FDROID_PACKAGE_URL`,
  *          `TERMUX_BOOT_GITHUB_REPO_NAME`, `TERMUX_BOOT_GITHUB_REPO_URL`, `TERMUX_BOOT_FDROID_PACKAGE_URL`,
  *          `TERMUX_FLOAT_GITHUB_REPO_NAME`, `TERMUX_FLOAT_GITHUB_REPO_URL`, `TERMUX_FLOAT_FDROID_PACKAGE_URL`,
- *          `TERMUX_STYLING_GITHUB_REPO_NAME`, `TERMUX_STYLING_GITHUB_REPO_URL`, `TERMUX_STYLING_FDROID_PACKAGE_URL`,
  *          `TERMUX_TASKER_GITHUB_REPO_NAME`, `TERMUX_TASKER_GITHUB_REPO_URL`, `TERMUX_TASKER_FDROID_PACKAGE_URL`,
  *          `TERMUX_WIDGET_GITHUB_REPO_NAME`, `TERMUX_WIDGET_GITHUB_REPO_URL` `TERMUX_WIDGET_FDROID_PACKAGE_URL`.
  *
@@ -110,7 +108,7 @@ import java.util.List;
  *      - Added `TERMUX_CRASH_LOG_FILE_PATH`, `TERMUX_CRASH_LOG_BACKUP_FILE_PATH`,
  *          `TERMUX_GITHUB_ISSUES_REPO_URL`, `TERMUX_API_GITHUB_ISSUES_REPO_URL`,
  *          `TERMUX_BOOT_GITHUB_ISSUES_REPO_URL`, `TERMUX_FLOAT_GITHUB_ISSUES_REPO_URL`,
- *          `TERMUX_STYLING_GITHUB_ISSUES_REPO_URL`, `TERMUX_TASKER_GITHUB_ISSUES_REPO_URL`,
+ *          `TERMUX_TASKER_GITHUB_ISSUES_REPO_URL`,
  *          `TERMUX_WIDGET_GITHUB_ISSUES_REPO_URL`,
  *          `TERMUX_GITHUB_WIKI_REPO_URL`, `TERMUX_PACKAGES_GITHUB_WIKI_REPO_URL`,
  *          `TERMUX_PACKAGES_GITHUB_REPO_NAME`, `TERMUX_PACKAGES_GITHUB_REPO_URL`, `TERMUX_PACKAGES_GITHUB_ISSUES_REPO_URL`,
@@ -280,7 +278,7 @@ import java.util.List;
  *      - Added `TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY`.
  *
  * - 0.53.0 (2025-01-12)
- *      - Renamed `TERMUX_API`, `TERMUX_STYLING`, `TERMUX_TASKER`, `TERMUX_WIDGET` classes with `_APP` suffix added.
+ *      - Renamed `TERMUX_API`, `TERMUX_TASKER`, `TERMUX_WIDGET` classes with `_APP` suffix added.
  *      - Added `TERMUX_*_MAIN_ACTIVITY_NAME` and `TERMUX_*_LAUNCHER_ACTIVITY_NAME` constants to each app class.
  */
 
@@ -402,20 +400,6 @@ public final class TermuxConstants {
     public static final String TERMUX_FLOAT_FDROID_PACKAGE_URL = FDROID_PACKAGES_BASE_URL + "/" + TERMUX_FLOAT_PACKAGE_NAME; // Default: "https://f-droid.org/en/packages/com.termux.window"
 
 
-    /** Termux:Styling app name */
-    public static final String TERMUX_STYLING_APP_NAME = "Termux:Styling"; // Default: "Termux:Styling"
-    /** Termux:Styling app package name */
-    public static final String TERMUX_STYLING_PACKAGE_NAME = TERMUX_PACKAGE_NAME + ".styling"; // Default: "com.termux.styling"
-    /** Termux:Styling GitHub repo name */
-    public static final String TERMUX_STYLING_GITHUB_REPO_NAME = "termux-styling"; // Default: "termux-styling"
-    /** Termux:Styling GitHub repo url */
-    public static final String TERMUX_STYLING_GITHUB_REPO_URL = TERMUX_GITHUB_ORGANIZATION_URL + "/" + TERMUX_STYLING_GITHUB_REPO_NAME; // Default: "https://github.com/termux/termux-styling"
-    /** Termux:Styling GitHub issues repo url */
-    public static final String TERMUX_STYLING_GITHUB_ISSUES_REPO_URL = TERMUX_STYLING_GITHUB_REPO_URL + "/issues"; // Default: "https://github.com/termux/termux-styling/issues"
-    /** Termux:Styling F-Droid package url */
-    public static final String TERMUX_STYLING_FDROID_PACKAGE_URL = FDROID_PACKAGES_BASE_URL + "/" + TERMUX_STYLING_PACKAGE_NAME; // Default: "https://f-droid.org/en/packages/com.termux.styling"
-
-
     /** Termux:Tasker app name */
     public static final String TERMUX_TASKER_APP_NAME = "Termux:Tasker"; // Default: "Termux:Tasker"
     /** Termux:Tasker app package name */
@@ -455,7 +439,6 @@ public final class TermuxConstants {
         TERMUX_API_APP_NAME,
         TERMUX_BOOT_APP_NAME,
         TERMUX_FLOAT_APP_NAME,
-        TERMUX_STYLING_APP_NAME,
         TERMUX_TASKER_APP_NAME,
         TERMUX_WIDGET_APP_NAME);
 
@@ -463,7 +446,6 @@ public final class TermuxConstants {
         TERMUX_API_PACKAGE_NAME,
         TERMUX_BOOT_PACKAGE_NAME,
         TERMUX_FLOAT_PACKAGE_NAME,
-        TERMUX_STYLING_PACKAGE_NAME,
         TERMUX_TASKER_PACKAGE_NAME,
         TERMUX_WIDGET_PACKAGE_NAME);
 
@@ -711,9 +693,6 @@ public final class TermuxConstants {
     /** Termux:Float app default SharedPreferences file basename without extension */
     public static final String TERMUX_FLOAT_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_FLOAT_PACKAGE_NAME + "_preferences"; // Default: "com.termux.window_preferences"
 
-    /** Termux:Styling app default SharedPreferences file basename without extension */
-    public static final String TERMUX_STYLING_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_STYLING_PACKAGE_NAME + "_preferences"; // Default: "com.termux.styling_preferences"
-
     /** Termux:Tasker app default SharedPreferences file basename without extension */
     public static final String TERMUX_TASKER_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_TASKER_PACKAGE_NAME + "_preferences"; // Default: "com.termux.tasker_preferences"
 
@@ -762,14 +741,14 @@ public final class TermuxConstants {
 
 
 
-    /** Termux app and Termux:Styling colors.properties file path */
+    /** User's terminal colors.properties file path */
     public static final String TERMUX_COLOR_PROPERTIES_FILE_PATH = TERMUX_DATA_HOME_DIR_PATH + "/colors.properties"; // Default: "/data/data/com.termux/files/home/.termux/colors.properties"
-    /** Termux app and Termux:Styling colors.properties file */
+    /** User's terminal colors.properties file */
     public static final File TERMUX_COLOR_PROPERTIES_FILE = new File(TERMUX_COLOR_PROPERTIES_FILE_PATH);
 
-    /** Termux app and Termux:Styling font.ttf file path */
+    /** User's terminal font.ttf file path */
     public static final String TERMUX_FONT_FILE_PATH = TERMUX_DATA_HOME_DIR_PATH + "/font.ttf"; // Default: "/data/data/com.termux/files/home/.termux/font.ttf"
-    /** Termux app and Termux:Styling font.ttf file */
+    /** User's terminal font.ttf file */
     public static final File TERMUX_FONT_FILE = new File(TERMUX_FONT_FILE_PATH);
 
 
@@ -1254,27 +1233,6 @@ public final class TermuxConstants {
             public static final String ACTION_HIDE = TERMUX_FLOAT_PACKAGE_NAME + ".ACTION_HIDE"; // Default: "com.termux.float.ACTION_HIDE"
 
         }
-
-    }
-
-
-
-
-
-    /**
-     * Termux:Styling app constants.
-     */
-    public static final class TERMUX_STYLING_APP {
-
-        /** Termux:Styling app core activity name. */
-        public static final String TERMUX_STYLING_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".TermuxStyleActivity"; // Default: "com.termux.styling.TermuxStyleActivity"
-
-
-        /** Termux:Styling app main activity name. */
-        public static final String TERMUX_STYLING_MAIN_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".activities.TermuxStylingMainActivity"; // Default: "com.termux.styling.activities.TermuxStylingMainActivity"
-
-        /** Termux:Styling app launcher activity name. This is an `activity-alias` for {@link #TERMUX_STYLING_MAIN_ACTIVITY_NAME} used for launchers with {@link Intent#CATEGORY_LAUNCHER}. */
-        public static final String TERMUX_STYLING_LAUNCHER_ACTIVITY_NAME = TERMUX_STYLING_PACKAGE_NAME + ".activities.TermuxStylingLauncherActivity"; // Default: "com.termux.styling.activities.TermuxStylingLauncherActivity"
 
     }
 

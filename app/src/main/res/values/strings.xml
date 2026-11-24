@@ -6,7 +6,6 @@
     <!ENTITY TERMUX_API_APP_NAME "Termux:API">
     <!ENTITY TERMUX_BOOT_APP_NAME "Termux:Boot">
     <!ENTITY TERMUX_FLOAT_APP_NAME "Termux:Float">
-    <!ENTITY TERMUX_STYLING_APP_NAME "Termux:Styling">
     <!ENTITY TERMUX_TASKER_APP_NAME "Termux:Tasker">
     <!ENTITY TERMUX_WIDGET_APP_NAME "Termux:Widget">
     ]>
@@ -82,7 +81,21 @@
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>
 
-    <string name="action_style_terminal">Style</string>
+    <string name="action_terminal_appearance">Appearance</string>
+    <string name="appearance_color_scheme">Color scheme</string>
+    <string name="appearance_font">Font</string>
+    <string name="appearance_color_custom">Use ~/.termux/colors.properties</string>
+    <string name="appearance_font_custom">Use ~/.termux/font.ttf</string>
+    <string name="appearance_gruvbox_dark">Gruvbox Dark</string>
+    <string name="appearance_gruvbox_light">Gruvbox Light</string>
+    <string name="appearance_gruvbox_material_dark_hard">Gruvbox Material Dark Hard</string>
+    <string name="appearance_gruvbox_material_dark_medium">Gruvbox Material Dark Medium</string>
+    <string name="appearance_gruvbox_material_dark_soft">Gruvbox Material Dark Soft</string>
+    <string name="appearance_gruvbox_material_light_hard">Gruvbox Material Light Hard</string>
+    <string name="appearance_gruvbox_material_light_medium">Gruvbox Material Light Medium</string>
+    <string name="appearance_gruvbox_material_light_soft">Gruvbox Material Light Soft</string>
+    <string name="appearance_hack_nerd_font_mono">Hack Nerd Font Mono</string>
+    <string name="appearance_jetbrains_mono">JetBrains Mono</string>
     <string name="action_toggle_keep_screen_on">Keep screen on</string>
     <string name="action_open_help">Help</string>
     <string name="action_open_settings">Settings</string>
@@ -90,11 +103,6 @@
     <string name="action_report_issue">Report Issue</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add termux debug info to report?</string>
-
-    <string name="error_styling_not_installed">The &TERMUX_STYLING_APP_NAME; Plugin App is not installed.</string>
-    <string name="action_styling_install">Install</string>
-
-
 
     <!-- Termux Notifications -->
     <string name="notification_action_exit">Exit</string>

@@ -41,9 +41,12 @@ The core [Termux](https://github.com/termux/termux-app) app comes with the follo
 - [Termux:API](https://github.com/termux/termux-api)
 - [Termux:Boot](https://github.com/termux/termux-boot)
 - [Termux:Float](https://github.com/termux/termux-float)
-- [Termux:Styling](https://github.com/termux/termux-styling)
 - [Termux:Tasker](https://github.com/termux/termux-tasker)
 - [Termux:Widget](https://github.com/termux/termux-widget)
+
+### Terminal Appearance
+
+Long-press a terminal session and select **More… → Appearance** to choose a color scheme or font. Gruvbox Material Dark Medium and Hack Nerd Font Mono are the defaults. The app uses existing `~/.termux/colors.properties` and `~/.termux/font.ttf` files until you explicitly select a bundled option. Select the custom file option to switch back. The app leaves both files intact. Run `termux-reload-settings` after editing a custom file to apply your changes.
 ##
 
 

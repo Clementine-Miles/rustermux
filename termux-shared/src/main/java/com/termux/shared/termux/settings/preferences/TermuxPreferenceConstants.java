@@ -51,8 +51,7 @@ package com.termux.shared.termux.settings.preferences;
  *
  * - 0.12.0 (2021-08-27)
  *      - Added `TERMUX_API_APP.KEY_LOG_LEVEL`, `TERMUX_BOOT_APP.KEY_LOG_LEVEL`,
- *          `TERMUX_FLOAT_APP.KEY_LOG_LEVEL`, `TERMUX_STYLING_APP.KEY_LOG_LEVEL`,
- *          `TERMUX_Widget_APP.KEY_LOG_LEVEL`.
+ *          `TERMUX_FLOAT_APP.KEY_LOG_LEVEL`, `TERMUX_Widget_APP.KEY_LOG_LEVEL`.
  *
  * - 0.13.0 (2021-09-02)
  *      - Added following to `TERMUX_FLOAT_APP`:
@@ -259,20 +258,6 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_TERMINAL_VIEW_KEY_LOGGING_ENABLED = "terminal_view_key_logging_enabled";
         public static final boolean DEFAULT_VALUE_TERMINAL_VIEW_KEY_LOGGING_ENABLED = false;
-
-    }
-
-
-
-    /**
-     * Termux:Styling app constants.
-     */
-    public static final class TERMUX_STYLING_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
 
     }
 
