@@ -46,6 +46,10 @@ The core [Termux](https://github.com/termux/termux-app) app comes with the follo
 ### Terminal Appearance
 
 Long-press a terminal session and select **More… → Appearance** to choose a color scheme or font. Gruvbox Material Dark Medium and Hack Nerd Font Mono are the defaults. The app uses existing `~/.termux/colors.properties` and `~/.termux/font.ttf` files until you explicitly select a bundled option. Select the custom file option to switch back. The app leaves both files intact. Run `termux-reload-settings` after editing a custom file to apply your changes.
+
+### Built-in Termux:API
+
+After normal Termux initialization on Android 7 or later, commands such as `termux-battery-status`, `termux-clipboard-get`, and `termux-notification` are available directly in the terminal. Android prompts for permissions when a command requires them. See the build, architecture, and verification notes. [Development guide](docs/development.md)
 ##
 
 

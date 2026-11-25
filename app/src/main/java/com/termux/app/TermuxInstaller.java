@@ -4,9 +4,12 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Environment;
+import android.system.ErrnoException;
 import android.system.Os;
+import android.system.OsConstants;
 import android.util.Pair;
 import android.view.WindowManager;
 
@@ -27,6 +30,8 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -101,6 +106,8 @@ final class TermuxInstaller {
                 bootstrapErrorMessage, null);
             return;
         }
+
+        installDefaultMotd(activity);
 
         // If prefix directory exists, even if its a symlink to a valid directory and symlink is not broken/dangling
         if (FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, true)) {
@@ -237,6 +244,44 @@ final class TermuxInstaller {
                 }
             }
         }.start();
+    }
+
+    /** Set the stock greeting once through the login script's supported customization path. */
+    private static void installDefaultMotd(Context context) {
+        SharedPreferences defaults = context.getSharedPreferences("termux_shell_defaults", Context.MODE_PRIVATE);
+        if (defaults.getBoolean("motd_initialized", false)) return;
+
+        File directory = TermuxConstants.TERMUX_DATA_HOME_DIR;
+        File destination = new File(directory, "motd.sh");
+        File temporary = null;
+        try {
+            if (!destination.exists()) {
+                if (!directory.mkdirs() && !directory.isDirectory()) {
+                    throw new IOException("Could not create " + directory);
+                }
+                File bundledScript = new File(TermuxConstants.TERMUX_APP.APPS_DIR_PATH, "motd.sh");
+                temporary = File.createTempFile("motd-install", ".tmp", bundledScript.getParentFile());
+                try (InputStream input = context.getAssets().open("shell/motd.sh");
+                     FileOutputStream output = new FileOutputStream(temporary)) {
+                    byte[] buffer = new byte[4096];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                }
+                Os.chmod(temporary.getAbsolutePath(), 0700);
+                Os.rename(temporary.getAbsolutePath(), bundledScript.getAbsolutePath());
+                // A concurrent writer or a dangling user symlink still owns the destination.
+                try {
+                    Os.symlink(bundledScript.getAbsolutePath(), destination.getAbsolutePath());
+                } catch (ErrnoException e) {
+                    if (e.errno != OsConstants.EEXIST) throw e;
+                }
+            }
+            defaults.edit().putBoolean("motd_initialized", true).apply();
+        } catch (ErrnoException | IOException e) {
+            Logger.logError(LOG_TAG, "Could not set the default shell greeting: " + e);
+        } finally {
+            if (temporary != null) temporary.delete();
+        }
     }
 
     public static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, String message) {

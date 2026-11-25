@@ -1,0 +1,7 @@
+#!@TERMUX_PREFIX@/bin/sh
+
+if [ "$#" -eq 0 ] && [ "${TERMUX_APP__AM_SOCKET_SERVER_ENABLED:-}" = true ] &&
+    [ -x "@TERMUX_PREFIX@/bin/termux-am" ]; then
+    exec "@TERMUX_PREFIX@/bin/termux-am" broadcast --user current -a com.termux.app.reload_style com.termux >/dev/null
+fi
+exec "@TERMUX_PREFIX@/bin/termux-reload-settings" "$@"

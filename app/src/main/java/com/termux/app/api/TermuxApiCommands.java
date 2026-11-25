@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
-/** Installs the APK's CLI wrappers outside the package manager's prefix. */
+/** Installs the APK's API and settings wrappers outside the package manager's prefix. */
 public final class TermuxApiCommands {
     private static final String LOG_TAG = "TermuxApiCommands";
     private static final String ASSET_PATH = "termux-api";
@@ -45,6 +45,7 @@ public final class TermuxApiCommands {
 
             installAssets(context, "bin", bin);
             installAssets(context, "libexec", libexec);
+            installScript(context, "shell/termux-reload-settings", new File(bin, "termux-reload-settings"));
             installLauncher(nativeClient, launcher);
             writeFile(marker, state, 0600);
         } catch (IOException | ErrnoException e) {
@@ -65,12 +66,17 @@ public final class TermuxApiCommands {
         }
 
         for (String name : assets) {
-            try (InputStream input = context.getAssets().open(assetDirectory + "/" + name)) {
-                String script = readText(input)
-                    .replace("@TERMUX_PREFIX@", TermuxConstants.TERMUX_PREFIX_DIR_PATH)
-                    .replace("@TERMUX_API_ROOT@", TermuxConstants.TERMUX_APP.API_COMMANDS_DIR_PATH);
-                writeFile(new File(outputDirectory, name), script, 0700);
-            }
+            installScript(context, assetDirectory + "/" + name, new File(outputDirectory, name));
+        }
+    }
+
+    private static void installScript(Context context, String assetPath, File destination)
+        throws IOException, ErrnoException {
+        try (InputStream input = context.getAssets().open(assetPath)) {
+            String script = readText(input)
+                .replace("@TERMUX_PREFIX@", TermuxConstants.TERMUX_PREFIX_DIR_PATH)
+                .replace("@TERMUX_API_ROOT@", TermuxConstants.TERMUX_APP.API_COMMANDS_DIR_PATH);
+            writeFile(destination, script, 0700);
         }
     }
 
