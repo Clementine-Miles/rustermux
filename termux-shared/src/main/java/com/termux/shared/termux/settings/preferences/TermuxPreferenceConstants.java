@@ -50,7 +50,7 @@ package com.termux.shared.termux.settings.preferences;
  *          `KEY_DISABLE_TERMINAL_MARGIN_ADJUSTMENT`.
  *
  * - 0.12.0 (2021-08-27)
- *      - Added `TERMUX_API_APP.KEY_LOG_LEVEL`, `TERMUX_BOOT_APP.KEY_LOG_LEVEL`,
+ *      - Added `TERMUX_BOOT_APP.KEY_LOG_LEVEL`,
  *          `TERMUX_FLOAT_APP.KEY_LOG_LEVEL`, `TERMUX_Widget_APP.KEY_LOG_LEVEL`.
  *
  * - 0.13.0 (2021-09-02)
@@ -182,25 +182,6 @@ public final class TermuxPreferenceConstants {
     }
 
 
-
-    /**
-     * Termux:API app constants.
-     */
-    public static final class TERMUX_API_APP {
-
-        /**
-         * Defines the key for current log level.
-         */
-        public static final String KEY_LOG_LEVEL = "log_level";
-
-
-        /**
-         * Defines the key for last used PendingIntent request code.
-         */
-        public static final String KEY_LAST_PENDING_INTENT_REQUEST_CODE = "last_pending_intent_request_code";
-        public static final int DEFAULT_VALUE_KEY_LAST_PENDING_INTENT_REQUEST_CODE = 0;
-
-    }
 
 
 

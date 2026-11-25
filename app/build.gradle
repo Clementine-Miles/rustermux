@@ -53,7 +53,6 @@ android {
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
         manifestPlaceholders.TERMUX_APP_NAME = "Termux"
-        manifestPlaceholders.TERMUX_API_APP_NAME = "Termux:API"
         manifestPlaceholders.TERMUX_BOOT_APP_NAME = "Termux:Boot"
         manifestPlaceholders.TERMUX_FLOAT_APP_NAME = "Termux:Float"
         manifestPlaceholders.TERMUX_TASKER_APP_NAME = "Termux:Tasker"
@@ -145,6 +144,9 @@ android {
 }
 
 dependencies {
+    implementation "androidx.biometric:biometric:1.2.0-alpha05"
+    implementation "androidx.documentfile:documentfile:1.0.1"
+    implementation "androidx.media:media:1.7.0"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.robolectric:robolectric:4.10"
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
@@ -240,3 +242,5 @@ afterEvaluate {
         variant.javaCompileProvider.get().dependsOn(downloadBootstraps)
     }
 }
+
+apply from: "termux-api.gradle"

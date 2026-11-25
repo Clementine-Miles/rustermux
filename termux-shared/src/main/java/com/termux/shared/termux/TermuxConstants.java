@@ -42,7 +42,6 @@ import java.util.List;
  *
  * - 0.4.0 (2021-03-16)
  *      - Added `BROADCAST_TERMUX_OPENED`,
- *          `TERMUX_API_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`
  *          `TERMUX_BOOT_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
  *          `TERMUX_FLOAT_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
  *          `TERMUX_TASKER_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION`,
@@ -97,7 +96,6 @@ import java.util.List;
  *      - Added `FDROID_PACKAGES_BASE_URL`,
  *          `TERMUX_GITHUB_ORGANIZATION_NAME`, `TERMUX_GITHUB_ORGANIZATION_URL`,
  *          `TERMUX_GITHUB_REPO_NAME`, `TERMUX_GITHUB_REPO_URL`, `TERMUX_FDROID_PACKAGE_URL`,
- *          `TERMUX_API_GITHUB_REPO_NAME`,`TERMUX_API_GITHUB_REPO_URL`, `TERMUX_API_FDROID_PACKAGE_URL`,
  *          `TERMUX_BOOT_GITHUB_REPO_NAME`, `TERMUX_BOOT_GITHUB_REPO_URL`, `TERMUX_BOOT_FDROID_PACKAGE_URL`,
  *          `TERMUX_FLOAT_GITHUB_REPO_NAME`, `TERMUX_FLOAT_GITHUB_REPO_URL`, `TERMUX_FLOAT_FDROID_PACKAGE_URL`,
  *          `TERMUX_TASKER_GITHUB_REPO_NAME`, `TERMUX_TASKER_GITHUB_REPO_URL`, `TERMUX_TASKER_FDROID_PACKAGE_URL`,
@@ -208,7 +206,7 @@ import java.util.List;
  *          `MIN_VALUE_EXTRA_SESSION_ACTION` and `MAX_VALUE_EXTRA_SESSION_ACTION`.
  *
  * - 0.32.0 (2021-09-23)
- *      - Added `TERMUX_API.TERMUX_API_ACTIVITY_NAME`, `TERMUX_TASKER.TERMUX_TASKER_ACTIVITY_NAME`
+ *      - Added `TERMUX_TASKER.TERMUX_TASKER_ACTIVITY_NAME`
  *          and `TERMUX_WIDGET.TERMUX_WIDGET_ACTIVITY_NAME`.
  *
  * - 0.33.0 (2021-10-08)
@@ -222,9 +220,6 @@ import java.util.List;
  *
  * - 0.36.0 (2022-03-10)
  *      - Added `TERMUX_APP.TERMUX_SERVICE.EXTRA_RUNNER` and `TERMUX_APP.RUN_COMMAND_SERVICE.EXTRA_RUNNER`
- *
- * - 0.37.0 (2022-03-15)
- *  - Added `TERMUX_API_APT_*`.
  *
  * - 0.38.0 (2022-03-16)
  *      - Added `TERMUX_APP.TERMUX_ACTIVITY.ACTION_NOTIFY_APP_CRASH`.
@@ -278,7 +273,7 @@ import java.util.List;
  *      - Added `TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY`.
  *
  * - 0.53.0 (2025-01-12)
- *      - Renamed `TERMUX_API`, `TERMUX_TASKER`, `TERMUX_WIDGET` classes with `_APP` suffix added.
+ *      - Renamed `TERMUX_TASKER`, `TERMUX_WIDGET` classes with `_APP` suffix added.
  *      - Added `TERMUX_*_MAIN_ACTIVITY_NAME` and `TERMUX_*_LAUNCHER_ACTIVITY_NAME` constants to each app class.
  */
 
@@ -358,20 +353,6 @@ public final class TermuxConstants {
     public static final String TERMUX_FDROID_PACKAGE_URL = FDROID_PACKAGES_BASE_URL + "/" + TERMUX_PACKAGE_NAME; // Default: "https://f-droid.org/en/packages/com.termux"
 
 
-    /** Termux:API app name */
-    public static final String TERMUX_API_APP_NAME = "Termux:API"; // Default: "Termux:API"
-    /** Termux:API app package name */
-    public static final String TERMUX_API_PACKAGE_NAME = TERMUX_PACKAGE_NAME + ".api"; // Default: "com.termux.api"
-    /** Termux:API GitHub repo name */
-    public static final String TERMUX_API_GITHUB_REPO_NAME = "termux-api"; // Default: "termux-api"
-    /** Termux:API GitHub repo url */
-    public static final String TERMUX_API_GITHUB_REPO_URL = TERMUX_GITHUB_ORGANIZATION_URL + "/" + TERMUX_API_GITHUB_REPO_NAME; // Default: "https://github.com/termux/termux-api"
-    /** Termux:API GitHub issues repo url */
-    public static final String TERMUX_API_GITHUB_ISSUES_REPO_URL = TERMUX_API_GITHUB_REPO_URL + "/issues"; // Default: "https://github.com/termux/termux-api/issues"
-    /** Termux:API F-Droid package url */
-    public static final String TERMUX_API_FDROID_PACKAGE_URL = FDROID_PACKAGES_BASE_URL + "/" + TERMUX_API_PACKAGE_NAME; // Default: "https://f-droid.org/en/packages/com.termux.api"
-
-
     /** Termux:Boot app name */
     public static final String TERMUX_BOOT_APP_NAME = "Termux:Boot"; // Default: "Termux:Boot"
     /** Termux:Boot app package name */
@@ -436,14 +417,12 @@ public final class TermuxConstants {
      */
 
     public static final List<String> TERMUX_PLUGIN_APP_NAMES_LIST = Arrays.asList(
-        TERMUX_API_APP_NAME,
         TERMUX_BOOT_APP_NAME,
         TERMUX_FLOAT_APP_NAME,
         TERMUX_TASKER_APP_NAME,
         TERMUX_WIDGET_APP_NAME);
 
     public static final List<String> TERMUX_PLUGIN_APP_PACKAGE_NAMES_LIST = Arrays.asList(
-        TERMUX_API_PACKAGE_NAME,
         TERMUX_BOOT_PACKAGE_NAME,
         TERMUX_FLOAT_PACKAGE_NAME,
         TERMUX_TASKER_PACKAGE_NAME,
@@ -495,16 +474,6 @@ public final class TermuxConstants {
     public static final String TERMUX_PACKAGES_GITHUB_REPO_URL = TERMUX_GITHUB_ORGANIZATION_URL + "/" + TERMUX_PACKAGES_GITHUB_REPO_NAME; // Default: "https://github.com/termux/termux-packages"
     /** Termux Packages GitHub issues repo url */
     public static final String TERMUX_PACKAGES_GITHUB_ISSUES_REPO_URL = TERMUX_PACKAGES_GITHUB_REPO_URL + "/issues"; // Default: "https://github.com/termux/termux-packages/issues"
-
-
-    /** Termux API apt package name */
-    public static final String TERMUX_API_APT_PACKAGE_NAME = "termux-api"; // Default: "termux-api"
-    /** Termux API apt GitHub repo name */
-    public static final String TERMUX_API_APT_GITHUB_REPO_NAME = "termux-api-package"; // Default: "termux-api-package"
-    /** Termux API apt GitHub repo url */
-    public static final String TERMUX_API_APT_GITHUB_REPO_URL = TERMUX_GITHUB_ORGANIZATION_URL + "/" + TERMUX_API_APT_GITHUB_REPO_NAME; // Default: "https://github.com/termux/termux-api-package"
-    /** Termux API apt GitHub issues repo url */
-    public static final String TERMUX_API_APT_GITHUB_ISSUES_REPO_URL = TERMUX_API_APT_GITHUB_REPO_URL + "/issues"; // Default: "https://github.com/termux/termux-api-package/issues"
 
 
 
@@ -684,8 +653,6 @@ public final class TermuxConstants {
     /** Termux app default SharedPreferences file basename without extension */
     public static final String TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_PACKAGE_NAME + "_preferences"; // Default: "com.termux_preferences"
 
-    /** Termux:API app default SharedPreferences file basename without extension */
-    public static final String TERMUX_API_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_API_PACKAGE_NAME + "_preferences"; // Default: "com.termux.api_preferences"
 
     /** Termux:Boot app default SharedPreferences file basename without extension */
     public static final String TERMUX_BOOT_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_BOOT_PACKAGE_NAME + "_preferences"; // Default: "com.termux.boot_preferences"
@@ -898,6 +865,9 @@ public final class TermuxConstants {
 
         /** Termux apps directory path */
         public static final String APPS_DIR_PATH = TERMUX_APPS_DIR_PATH + "/" + TERMUX_PACKAGE_NAME; // Default: "/data/data/com.termux/files/apps/com.termux"
+
+        /** Bundled API command wrappers are installed independently of apt-managed files. */
+        public static final String API_COMMANDS_DIR_PATH = APPS_DIR_PATH + "/termux-api";
 
         /** termux-am socket file path */
         public static final String TERMUX_AM_SOCKET_FILE_PATH = APPS_DIR_PATH + "/termux-am/am.sock"; // Default: "/data/data/com.termux/files/apps/com.termux/termux-am/am.sock"
@@ -1172,19 +1142,6 @@ public final class TermuxConstants {
         }
     }
 
-
-    /**
-     * Termux:API app constants.
-     */
-    public static final class TERMUX_API_APP {
-
-        /** Termux:API app main activity name. */
-        public static final String TERMUX_API_MAIN_ACTIVITY_NAME = TERMUX_API_PACKAGE_NAME + ".activities.TermuxAPIMainActivity"; // Default: "com.termux.api.activities.TermuxAPIMainActivity"
-
-        /** Termux:API app launcher activity name. This is an `activity-alias` for {@link #TERMUX_API_MAIN_ACTIVITY_NAME} used for launchers with {@link Intent#CATEGORY_LAUNCHER}. */
-        public static final String TERMUX_API_LAUNCHER_ACTIVITY_NAME = TERMUX_API_PACKAGE_NAME + ".activities.TermuxAPILauncherActivity"; // Default: "com.termux.api.activities.TermuxAPILauncherActivity"
-
-    }
 
 
 

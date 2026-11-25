@@ -38,7 +38,6 @@ Quick how-to about Termux package management is available at [Package Management
 
 The core [Termux](https://github.com/termux/termux-app) app comes with the following optional plugin apps.
 
-- [Termux:API](https://github.com/termux/termux-api)
 - [Termux:Boot](https://github.com/termux/termux-boot)
 - [Termux:Float](https://github.com/termux/termux-float)
 - [Termux:Tasker](https://github.com/termux/termux-tasker)

@@ -1,0 +1,285 @@
+package com.termux.api;
+
+import android.Manifest;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Process;
+import android.provider.Settings;
+
+import androidx.annotation.RequiresApi;
+
+import com.termux.api.apis.AudioAPI;
+import com.termux.api.apis.BatteryStatusAPI;
+import com.termux.api.apis.BrightnessAPI;
+import com.termux.api.apis.CallLogAPI;
+import com.termux.api.apis.CameraInfoAPI;
+import com.termux.api.apis.CameraPhotoAPI;
+import com.termux.api.apis.ClipboardAPI;
+import com.termux.api.apis.ContactListAPI;
+import com.termux.api.apis.DialogAPI;
+import com.termux.api.apis.DownloadAPI;
+import com.termux.api.apis.FingerprintAPI;
+import com.termux.api.apis.InfraredAPI;
+import com.termux.api.apis.JobSchedulerAPI;
+import com.termux.api.apis.KeystoreAPI;
+import com.termux.api.apis.LocationAPI;
+import com.termux.api.apis.MediaPlayerAPI;
+import com.termux.api.apis.MediaScannerAPI;
+import com.termux.api.apis.MicRecorderAPI;
+import com.termux.api.apis.NfcAPI;
+import com.termux.api.apis.NotificationAPI;
+import com.termux.api.apis.NotificationListAPI;
+import com.termux.api.apis.SAFAPI;
+import com.termux.api.apis.SensorAPI;
+import com.termux.api.apis.ShareAPI;
+import com.termux.api.apis.SmsInboxAPI;
+import com.termux.api.apis.SmsSendAPI;
+import com.termux.api.apis.SpeechToTextAPI;
+import com.termux.api.apis.StorageGetAPI;
+import com.termux.api.apis.TelephonyAPI;
+import com.termux.api.apis.TextToSpeechAPI;
+import com.termux.api.apis.ToastAPI;
+import com.termux.api.apis.TorchAPI;
+import com.termux.api.apis.UsbAPI;
+import com.termux.api.apis.VibrateAPI;
+import com.termux.api.apis.VolumeAPI;
+import com.termux.api.apis.WallpaperAPI;
+import com.termux.api.apis.WifiAPI;
+import com.termux.api.activities.TermuxApiPermissionActivity;
+import com.termux.api.util.ResultReturner;
+import com.termux.shared.logger.Logger;
+
+public class TermuxApiReceiver extends BroadcastReceiver {
+
+    private static final String LOG_TAG = "TermuxApiReceiver";
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        // This receiver is private. An identified sender must also have the app UID.
+        if (Build.VERSION.SDK_INT >= 34) {
+            int senderUid = getSentFromUid();
+            if (senderUid >= 0 && senderUid != Process.myUid()) return;
+        }
+        boolean notificationReply = NotificationAPI.ACTION_NOTIFICATION_REPLY.equals(intent.getAction());
+        try {
+            if (notificationReply) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    NotificationAPI.onReceiveReplyToNotification(this, context, intent);
+                }
+                return;
+            }
+            if (!ResultReturner.hasOutputSocket(intent)) return;
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                ResultReturner.returnError(this, intent, TermuxAPIConstants.UNSUPPORTED_ANDROID_VERSION);
+                return;
+            }
+            String apiMethod = intent.getStringExtra("api_method");
+            if (apiMethod == null || apiMethod.isEmpty()) {
+                ResultReturner.returnError(this, intent, "Missing API method");
+                return;
+            }
+            doWork(context, intent, apiMethod);
+        } catch (Exception exception) {
+            Logger.logError(LOG_TAG, "API request failed: " + exception.getClass().getSimpleName());
+            if (!notificationReply) {
+                ResultReturner.returnError(this, intent, "API request failed");
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private void doWork(Context context, Intent intent, String apiMethod) {
+        switch (apiMethod) {
+            case "AudioInfo":
+                AudioAPI.onReceive(this, context, intent);
+                break;
+            case "BatteryStatus":
+                BatteryStatusAPI.onReceive(this, context, intent);
+                break;
+            case "Brightness":
+                if (!Settings.System.canWrite(context)) {
+                    ResultReturner.returnError(this, intent, "Grant Termux permission to modify system settings");
+                    Intent settingsIntent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                        Uri.fromParts("package", context.getPackageName(), null))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(settingsIntent);
+                    return;
+                }
+                BrightnessAPI.onReceive(this, context, intent);
+                break;
+            case "CameraInfo":
+                CameraInfoAPI.onReceive(this, context, intent);
+                break;
+            case "CameraPhoto":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.CAMERA)) {
+                    CameraPhotoAPI.onReceive(this, context, intent);
+                }
+                break;
+            case "CallLog":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.READ_CALL_LOG)) {
+                    CallLogAPI.onReceive(context, intent);
+                }
+                break;
+            case "Clipboard":
+                ClipboardAPI.onReceive(this, context, intent);
+                break;
+            case "ContactList":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.READ_CONTACTS)) {
+                    ContactListAPI.onReceive(this, context, intent);
+                }
+                break;
+            case "Dialog":
+                DialogAPI.onReceive(context, intent);
+                break;
+            case "Download":
+                DownloadAPI.onReceive(this, context, intent);
+                break;
+            case "Fingerprint":
+                FingerprintAPI.onReceive(context, intent);
+                break;
+            case "InfraredFrequencies":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.TRANSMIT_IR)) {
+                    InfraredAPI.onReceiveCarrierFrequency(this, context, intent);
+                }
+                break;
+            case "InfraredTransmit":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.TRANSMIT_IR)) {
+                    InfraredAPI.onReceiveTransmit(this, context, intent);
+                }
+                break;
+            case "JobScheduler":
+                JobSchedulerAPI.onReceive(this, context, intent);
+                break;
+            case "Keystore":
+                KeystoreAPI.onReceive(this, intent);
+                break;
+            case "Location":
+                if (TermuxApiPermissionActivity.checkAndRequestPreciseLocation(context, intent)) {
+                    LocationAPI.onReceive(this, context, intent);
+                }
+                break;
+            case "MediaPlayer":
+                MediaPlayerAPI.onReceive(context, intent);
+                break;
+            case "MediaScanner":
+                MediaScannerAPI.onReceive(this, context, intent);
+                break;
+            case "MicRecorder":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.RECORD_AUDIO)) {
+                    MicRecorderAPI.onReceive(context, intent);
+                }
+                break;
+            case "Nfc":
+                NfcAPI.onReceive(context, intent);
+                break;
+            case "NotificationList":
+                if (!hasNotificationAccess(context)) {
+                    ResultReturner.returnError(this, intent, "Grant Termux notification access in Android settings");
+                    context.startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } else {
+                    NotificationListAPI.onReceive(this, context, intent);
+                }
+                break;
+            case "Notification":
+                NotificationAPI.onReceiveShowNotification(this, context, intent);
+                break;
+            case "NotificationChannel":
+                NotificationAPI.onReceiveChannel(this, context, intent);
+                break;
+            case "NotificationRemove":
+                NotificationAPI.onReceiveRemoveNotification(this, context, intent);
+                break;
+            case "SAF":
+                SAFAPI.onReceive(this, context, intent);
+                break;
+            case "Sensor":
+                SensorAPI.onReceive(context, intent);
+                break;
+            case "Share":
+                ShareAPI.onReceive(this, context, intent);
+                break;
+            case "SmsInbox":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS)) {
+                    SmsInboxAPI.onReceive(this, context, intent);
+                }
+                break;
+            case "SmsSend":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.READ_PHONE_STATE, Manifest.permission.SEND_SMS)) {
+                    SmsSendAPI.onReceive(this, context, intent);
+                }
+                break;
+            case "StorageGet":
+                StorageGetAPI.onReceive(this, context, intent);
+                break;
+            case "SpeechToText":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.RECORD_AUDIO)) {
+                    SpeechToTextAPI.onReceive(context, intent);
+                }
+                break;
+            case "TelephonyCall":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.CALL_PHONE)) {
+                    TelephonyAPI.onReceiveTelephonyCall(this, context, intent);
+                }
+                break;
+            case "TelephonyCellInfo":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                    TelephonyAPI.onReceiveTelephonyCellInfo(this, context, intent);
+                }
+                break;
+            case "TelephonyDeviceInfo":
+                if (TermuxApiPermissionActivity.checkAndRequestPermissions(context, intent, Manifest.permission.READ_PHONE_STATE)) {
+                    TelephonyAPI.onReceiveTelephonyDeviceInfo(this, context, intent);
+                }
+                break;
+            case "TextToSpeech":
+                TextToSpeechAPI.onReceive(context, intent);
+                break;
+            case "Toast":
+                ToastAPI.onReceive(context, intent);
+                break;
+            case "Torch":
+                TorchAPI.onReceive(this, context, intent);
+                break;
+            case "Usb":
+                UsbAPI.onReceive(context, intent);
+                break;
+            case "Vibrate":
+                VibrateAPI.onReceive(this, context, intent);
+                break;
+            case "Volume":
+                VolumeAPI.onReceive(this, context, intent);
+                break;
+            case "Wallpaper":
+                WallpaperAPI.onReceive(context, intent);
+                break;
+            case "WifiConnectionInfo":
+                WifiAPI.onReceiveWifiConnectionInfo(this, context, intent);
+                break;
+            case "WifiScanInfo":
+                if (TermuxApiPermissionActivity.checkAndRequestPreciseLocation(context, intent)) {
+                    WifiAPI.onReceiveWifiScanInfo(this, context, intent);
+                }
+                break;
+            case "WifiEnable":
+                WifiAPI.onReceiveWifiEnable(this, context, intent);
+                break;
+            default:
+                ResultReturner.returnError(this, intent, "Unknown API method: " + apiMethod);
+        }
+    }
+
+    private boolean hasNotificationAccess(Context context) {
+        ComponentName service = new ComponentName(context, NotificationListAPI.NotificationService.class);
+        String listeners = Settings.Secure.getString(context.getContentResolver(), "enabled_notification_listeners");
+        if (listeners == null) return false;
+        for (String listener : listeners.split(":")) {
+            if (service.equals(ComponentName.unflattenFromString(listener))) return true;
+        }
+        return false;
+    }
+}

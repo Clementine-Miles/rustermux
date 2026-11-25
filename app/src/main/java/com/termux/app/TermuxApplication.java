@@ -4,6 +4,8 @@ import android.app.Application;
 import android.content.Context;
 
 import com.termux.BuildConfig;
+import com.termux.api.util.ResultReturner;
+import com.termux.app.api.TermuxApiCommands;
 import com.termux.shared.errors.Error;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxBootstrap;
@@ -33,6 +35,7 @@ public class TermuxApplication extends Application {
         setLogConfig(context);
 
         Logger.logDebug("Starting Application");
+        ResultReturner.setContext(context);
 
         // Set TermuxBootstrap.TERMUX_APP_PACKAGE_MANAGER and TermuxBootstrap.TERMUX_APP_PACKAGE_VARIANT
         TermuxBootstrap.setTermuxPackageManagerAndVariant(BuildConfig.TERMUX_PACKAGE_VARIANT);
@@ -58,6 +61,8 @@ public class TermuxApplication extends Application {
                 Logger.logErrorExtended(LOG_TAG, "Create apps/termux-app directory failed\n" + error);
                 return;
             }
+
+            TermuxApiCommands.install(context);
 
             // Setup termux-am-socket server
             TermuxAmSocketServer.setupTermuxAmSocketServer(context);
