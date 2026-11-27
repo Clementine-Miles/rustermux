@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -76,11 +75,10 @@ public class LocationAPI {
             public void writeJson(final JsonWriter out) throws Exception {
                 LocationManager manager = (LocationManager) LocationService.this.getSystemService(Context.LOCATION_SERVICE);
 
-                // If on Android `>= 11` and background location permission is missing, ask user to grant it.
+                // A background location request needs the all-the-time grant.
                 // - https://developer.android.com/reference/android/Manifest.permission#ACCESS_BACKGROUND_LOCATION
                 // - https://developer.android.com/develop/sensors-and-location/location/permissions/background
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-                    !PermissionUtils.checkPermission(LocationService.this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
+                if (!PermissionUtils.checkPermission(LocationService.this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
                     out.beginObject()
                         .name("API_ERROR")
                         .value("Background location permission not granted." +
@@ -239,9 +237,7 @@ public class LocationAPI {
         out.name("longitude").value(lastKnownLocation.getLongitude());
         out.name("altitude").value(lastKnownLocation.getAltitude());
         out.name("accuracy").value(lastKnownLocation.getAccuracy());
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            out.name("vertical_accuracy").value(lastKnownLocation.getVerticalAccuracyMeters());
-        }
+        out.name("vertical_accuracy").value(lastKnownLocation.getVerticalAccuracyMeters());
         out.name("bearing").value(lastKnownLocation.getBearing());
         out.name("speed").value(lastKnownLocation.getSpeed());
         long elapsedMs = (SystemClock.elapsedRealtimeNanos() - lastKnownLocation.getElapsedRealtimeNanos()) / 1000000;

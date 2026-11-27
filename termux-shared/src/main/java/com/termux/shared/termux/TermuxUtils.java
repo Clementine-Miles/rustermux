@@ -15,8 +15,6 @@ import com.termux.shared.errors.Error;
 import com.termux.shared.android.PackageUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
-import org.apache.commons.io.IOUtils;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
@@ -61,15 +59,12 @@ public class TermuxUtils {
     public static String geAPTInfoMarkdownString(@NonNull final Context context) {
 
         String aptInfoScript;
-        InputStream inputStream = context.getResources().openRawResource(com.termux.shared.R.raw.apt_info_script);
-        try {
-            aptInfoScript = IOUtils.toString(inputStream, Charset.defaultCharset());
+        try (InputStream inputStream = context.getResources().openRawResource(com.termux.shared.R.raw.apt_info_script)) {
+            aptInfoScript = new String(inputStream.readAllBytes(), Charset.defaultCharset());
         } catch (IOException e) {
             Logger.logError(LOG_TAG, "Failed to get APT info script: " + e.getMessage());
             return null;
         }
-
-        IOUtils.closeQuietly(inputStream);
 
         if (aptInfoScript == null || aptInfoScript.isEmpty()) {
             Logger.logError(LOG_TAG, "The APT info script is null or empty");
@@ -172,10 +167,6 @@ public class TermuxUtils {
 
 
 
-    public static String getAPKRelease(String signingCertificateSHA256Digest) {
-        return TermuxConstants.TERMUX_DEBUG_SIGNER_SHA256.equalsIgnoreCase(signingCertificateSHA256Digest)
-            ? "GITHUB" : "UNKNOWN";
-    }
 
     /**
      * Get a process id of the main app process of the {@link TermuxConstants#TERMUX_PACKAGE_NAME}

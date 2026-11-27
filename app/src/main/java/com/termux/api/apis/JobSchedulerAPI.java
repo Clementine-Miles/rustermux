@@ -8,7 +8,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.PersistableBundle;
 import android.text.TextUtils;
 
@@ -44,16 +43,14 @@ public class JobSchedulerAPI {
         if (jobInfo.isPersisted()) {
             description.add("(persisted)");
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (jobInfo.isRequireBatteryNotLow()) {
-                description.add("(battery not low)");
-            }
-            if (jobInfo.isRequireStorageNotLow()) {
-                description.add("(storage not low)");
-            }
+        if (jobInfo.isRequireBatteryNotLow()) {
+            description.add("(battery not low)");
         }
-        if (Build.VERSION.SDK_INT >= 28) {
-            description.add(String.format(Locale.ENGLISH, "(network: %s)", jobInfo.getRequiredNetwork().toString()));
+        if (jobInfo.isRequireStorageNotLow()) {
+            description.add("(storage not low)");
+        }
+        if (jobInfo.getRequiredNetwork() != null) {
+            description.add("(network: " + jobInfo.getRequiredNetwork() + ")");
         }
 
         return String.format(Locale.ENGLISH, "Job %d: %s    %s", jobInfo.getId(), path,
@@ -113,10 +110,7 @@ public class JobSchedulerAPI {
                     networkTypeCode = JobInfo.NETWORK_TYPE_UNMETERED;
                     break;
                 case "cellular":
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                        networkTypeCode = JobInfo.NETWORK_TYPE_CELLULAR;
-                    else
-                        networkTypeCode = JobInfo.NETWORK_TYPE_UNMETERED;
+                    networkTypeCode = JobInfo.NETWORK_TYPE_CELLULAR;
                     break;
                 case "not_roaming":
                     networkTypeCode = JobInfo.NETWORK_TYPE_NOT_ROAMING;
@@ -167,13 +161,11 @@ public class JobSchedulerAPI {
                 .setPersisted(persisted)
                 .setRequiresDeviceIdle(idle);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder = builder.setRequiresBatteryNotLow(batteryNotLow);
-            builder = builder.setRequiresStorageNotLow(storageNotLow);
-        }
+        builder = builder.setRequiresBatteryNotLow(batteryNotLow);
+        builder = builder.setRequiresStorageNotLow(storageNotLow);
 
         if (periodicMillis > 0) {
-            // For Android `>= 7`, the minimum period is 900000ms (15 minutes).
+            // The minimum periodic interval is 15 minutes.
             // - https://developer.android.com/reference/android/app/job/JobInfo#getMinPeriodMillis()
             // - https://cs.android.com/android/_/android/platform/frameworks/base/+/10be4e90
             builder = builder.setPeriodic(periodicMillis);
@@ -284,11 +276,11 @@ public class JobSchedulerAPI {
             executionIntent.putExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, true);
 
             Context context = getApplicationContext();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // https://developer.android.com/about/versions/oreo/background.html
+            try {
                 context.startForegroundService(executionIntent);
-            } else {
-                context.startService(executionIntent);
+            } catch (IllegalStateException | SecurityException failure) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Android rejected the scheduled job", failure);
+                return false;
             }
 
             Logger.logInfo(LOG_TAG, "Job started for \"" + filePath + "\"");

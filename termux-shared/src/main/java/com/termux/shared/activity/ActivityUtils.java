@@ -7,7 +7,6 @@ import android.content.Intent;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 
 import com.termux.shared.errors.Error;
 import com.termux.shared.errors.FunctionErrno;
@@ -79,8 +78,7 @@ public class ActivityUtils {
     /**
      * Start an {@link Activity} for result.
      *
-     * @param context The context for operations. It must be an instance of {@link Activity} or
-     *               {@link AppCompatActivity}. It is ignored if {@code activityResultLauncher}
+     * @param context The context for operations. It must be an instance of {@link Activity}. It is ignored if {@code activityResultLauncher}
      *                is not {@code null}.
      * @param requestCode The request code to use while sending intent. This must be >= 0, otherwise
      *                    exception will be raised. This is ignored if {@code activityResultLauncher}
@@ -113,12 +111,10 @@ public class ActivityUtils {
                     return error;
                 }
 
-                if (context instanceof AppCompatActivity)
-                    ((AppCompatActivity) context).startActivityForResult(intent, requestCode);
-                else if (context instanceof Activity)
+                if (context instanceof Activity)
                     ((Activity) context).startActivityForResult(intent, requestCode);
                 else {
-                    error = FunctionErrno.ERRNO_PARAMETER_NOT_INSTANCE_OF.getError("context", "startActivityForResult", "Activity or AppCompatActivity");
+                    error = FunctionErrno.ERRNO_PARAMETER_NOT_INSTANCE_OF.getError("context", "startActivityForResult", "Activity");
                     if (logErrorMessage)
                         error.logErrorAndShowToast(showErrorMessage ? context : null, LOG_TAG);
                     return error;

@@ -60,6 +60,7 @@ public final class TerminalColorScheme {
         0xffffffff, 0xff000000, 0xffffffff};
 
     public final int[] mDefaultColors = new int[TextStyle.NUM_INDEXED_COLORS];
+    private int selectionColor;
 
     public TerminalColorScheme() {
         reset();
@@ -67,6 +68,7 @@ public final class TerminalColorScheme {
 
     private void reset() {
         System.arraycopy(DEFAULT_COLORSCHEME, 0, mDefaultColors, 0, TextStyle.NUM_INDEXED_COLORS);
+        selectionColor = 0;
     }
 
     public void updateWith(Properties props) {
@@ -77,7 +79,11 @@ public final class TerminalColorScheme {
             String value = (String) entries.getValue();
             int colorIndex;
 
-            if (key.equals("foreground")) {
+            if (key.equals("selection")) {
+                selectionColor = TerminalColors.parse(value);
+                if (selectionColor == 0) throw new IllegalArgumentException("Invalid selection color: '" + value + "'");
+                continue;
+            } else if (key.equals("foreground")) {
                 colorIndex = TextStyle.COLOR_INDEX_FOREGROUND;
             } else if (key.equals("background")) {
                 colorIndex = TextStyle.COLOR_INDEX_BACKGROUND;
@@ -87,6 +93,9 @@ public final class TerminalColorScheme {
             } else if (key.startsWith("color")) {
                 try {
                     colorIndex = Integer.parseInt(key.substring(5));
+                    if (colorIndex < 0 || colorIndex > 255) {
+                        throw new IllegalArgumentException("Invalid color index: '" + key + "'");
+                    }
                 } catch (NumberFormatException e) {
                     throw new IllegalArgumentException("Invalid property: '" + key + "'");
                 }
@@ -103,6 +112,11 @@ public final class TerminalColorScheme {
 
         if (!cursorPropExists)
             setCursorColorForBackground();
+    }
+
+    /** Zero keeps inverse selection highlighting. */
+    public int selectionColor() {
+        return selectionColor;
     }
 
     /**

@@ -6,9 +6,24 @@ plugins {
 }
 
 def bootstrapDirectory = layout.buildDirectory.dir("generated/bootstrap").get().asFile
+def appPackageName = "com.termux"
+def releaseSigningVariables = [
+    "RUSTERMUX_KEYSTORE",
+    "RUSTERMUX_KEYSTORE_PASSWORD",
+    "RUSTERMUX_KEY_ALIAS",
+    "RUSTERMUX_KEY_PASSWORD"
+]
+def releaseSigningValues = releaseSigningVariables.collectEntries { name ->
+    [(name): providers.environmentVariable(name).orNull]
+}
+def suppliedSigningVariables = releaseSigningVariables.findAll { releaseSigningValues[it] }
+if (suppliedSigningVariables && suppliedSigningVariables.size() != releaseSigningVariables.size()) {
+    def missing = releaseSigningVariables - suppliedSigningVariables
+    throw new GradleException("Incomplete private release signing configuration. Missing ${missing.join(', ')}")
+}
 
 android {
-    namespace "com.termux"
+    namespace appPackageName
 
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
     ndkVersion = project.properties.ndkVersion
@@ -23,17 +38,18 @@ android {
     }
 
     defaultConfig {
+        applicationId appPackageName
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         versionCode 118
         versionName "0.118.0"
 
-        manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
+        manifestPlaceholders.TERMUX_PACKAGE_NAME = appPackageName
 
         externalNativeBuild {
             ndkBuild {
                 arguments "TERMUX_BOOTSTRAP_DIR=${bootstrapDirectory.absolutePath}"
-                cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os", "-fno-stack-protector", "-Wl,--gc-sections"
+                cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"
             }
         }
 
@@ -43,30 +59,28 @@ android {
     }
 
     signingConfigs {
-        debug {
-            storeFile file('testkey_untrusted.jks')
-            keyAlias 'alias'
-            storePassword 'xrj45yWGLbsO7W0v'
-            keyPassword 'xrj45yWGLbsO7W0v'
+        if (suppliedSigningVariables) {
+            release {
+                storeFile rootProject.file(releaseSigningValues.RUSTERMUX_KEYSTORE)
+                storePassword releaseSigningValues.RUSTERMUX_KEYSTORE_PASSWORD
+                keyAlias releaseSigningValues.RUSTERMUX_KEY_ALIAS
+                keyPassword releaseSigningValues.RUSTERMUX_KEY_PASSWORD
+            }
         }
     }
 
     buildTypes {
         release {
+            debuggable false
+            jniDebuggable false
             minifyEnabled true
             shrinkResources false // Reproducible builds
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
-
-        debug {
-            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (suppliedSigningVariables) signingConfig signingConfigs.release
         }
     }
 
     compileOptions {
-        // Flag to enable support for the new language APIs
-        coreLibraryDesugaringEnabled true
-
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -100,14 +114,13 @@ dependencies {
     implementation "androidx.documentfile:documentfile:1.0.1"
     implementation "androidx.media:media:1.7.0"
     testImplementation "junit:junit:4.13.2"
-    testImplementation "org.robolectric:robolectric:4.10"
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$desugarJdkLibsVersion"
+    testImplementation "org.robolectric:robolectric:4.14.1"
 }
 
 def bootstrapArch = rootProject.androidNativeAbi.bootstrapArch
 def bootstrapArchive = new File(bootstrapDirectory, "bootstrap-${bootstrapArch}.zip")
 def bootstrapAssemblyInclude = new File(bootstrapDirectory, "termux-bootstrap-archive.inc")
-def bootstrapChecksum = "ea2aeba8819e517db711f8c32369e89e7c52cee73e07930ff91185e1ab93f4f3"
+def bootstrapChecksum = providers.fileContents(layout.projectDirectory.file("bootstrap.sha256")).asText.get().trim()
 def bootstrapRelease = "2026.02.12-r1%2Bapt.android-7"
 
 def sha256(File file) {

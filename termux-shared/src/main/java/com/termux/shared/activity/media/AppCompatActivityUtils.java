@@ -1,11 +1,9 @@
 package com.termux.shared.activity.media;
 
-import androidx.annotation.IdRes;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
-import androidx.appcompat.widget.Toolbar;
 
 import com.termux.shared.theme.NightMode;
 
@@ -31,17 +29,6 @@ public class AppCompatActivityUtils {
             }
         }
 
-    }
-
-    /** Set activity toolbar.
-     *
-     * @param activity The host {@link AppCompatActivity}.
-     * @param id The toolbar resource id.
-     */
-    public static void setToolbar(@NonNull AppCompatActivity activity, @IdRes int id) {
-        Toolbar toolbar = activity.findViewById(id);
-        if (toolbar != null)
-            activity.setSupportActionBar(toolbar);
     }
 
     /** Set whether back button should be shown in activity toolbar.

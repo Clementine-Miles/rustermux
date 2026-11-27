@@ -10,7 +10,7 @@ show_usage () {
 	echo "-h         show this help"
 	echo "-f <file>  set wallpaper from file"
 	echo "-u <url>   set wallpaper from url resource"
-	echo "-l         set wallpaper for lockscreen (Nougat and later)"
+	echo "-l         set wallpaper for lockscreen"
 	exit 1
 }
 

@@ -1,4 +1,5 @@
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <jni.h>
 #include <signal.h>
@@ -11,9 +12,6 @@
 #include <unistd.h>
 
 #define TERMUX_UNUSED(x) x __attribute__((__unused__))
-#ifdef __APPLE__
-# define LACKS_PTSNAME_R
-#endif
 
 static int throw_runtime_exception(JNIEnv* env, char const* message)
 {
@@ -36,27 +34,19 @@ static int create_subprocess(JNIEnv* env,
     int ptm = open("/dev/ptmx", O_RDWR | O_CLOEXEC);
     if (ptm < 0) return throw_runtime_exception(env, "Cannot open /dev/ptmx");
 
-#ifdef LACKS_PTSNAME_R
-    char* devname;
-#else
     char devname[64];
-#endif
-    if (grantpt(ptm) || unlockpt(ptm) ||
-#ifdef LACKS_PTSNAME_R
-            (devname = ptsname(ptm)) == NULL
-#else
-            ptsname_r(ptm, devname, sizeof(devname))
-#endif
-       ) {
+    if (grantpt(ptm) || unlockpt(ptm) || ptsname_r(ptm, devname, sizeof(devname))) {
+        close(ptm);
         return throw_runtime_exception(env, "Cannot grantpt()/unlockpt()/ptsname_r() on /dev/ptmx");
     }
 
     // Enable UTF-8 mode and disable flow control to prevent Ctrl+S from locking up the display.
     struct termios tios;
-    tcgetattr(ptm, &tios);
-    tios.c_iflag |= IUTF8;
-    tios.c_iflag &= ~(IXON | IXOFF);
-    tcsetattr(ptm, TCSANOW, &tios);
+    if (tcgetattr(ptm, &tios) == 0) {
+        tios.c_iflag |= IUTF8;
+        tios.c_iflag &= ~(IXON | IXOFF);
+        tcsetattr(ptm, TCSANOW, &tios);
+    }
 
     /** Set initial winsize. */
     struct winsize sz = { .ws_row = (unsigned short) rows, .ws_col = (unsigned short) columns, .ws_xpixel = (unsigned short) (columns * cell_width), .ws_ypixel = (unsigned short) (rows * cell_height)};
@@ -64,6 +54,7 @@ static int create_subprocess(JNIEnv* env,
 
     pid_t pid = fork();
     if (pid < 0) {
+        close(ptm);
         return throw_runtime_exception(env, "Fork failed");
     } else if (pid > 0) {
         *pProcessId = (int) pid;
@@ -78,7 +69,7 @@ static int create_subprocess(JNIEnv* env,
         setsid();
 
         int pts = open(devname, O_RDWR);
-        if (pts < 0) exit(-1);
+        if (pts < 0) _exit(1);
 
         dup2(pts, 0);
         dup2(pts, 1);
@@ -191,8 +182,7 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_setPtyWindowSize(JNIEnv* TER
 JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_setPtyUTF8Mode(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint fd)
 {
     struct termios tios;
-    tcgetattr(fd, &tios);
-    if ((tios.c_iflag & IUTF8) == 0) {
+    if (tcgetattr(fd, &tios) == 0 && (tios.c_iflag & IUTF8) == 0) {
         tios.c_iflag |= IUTF8;
         tcsetattr(fd, TCSANOW, &tios);
     }
@@ -201,15 +191,18 @@ JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_setPtyUTF8Mode(JNIEnv* TERMU
 JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_waitFor(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint pid)
 {
     int status;
-    waitpid(pid, &status, 0);
-    if (WIFEXITED(status)) {
-        return WEXITSTATUS(status);
-    } else if (WIFSIGNALED(status)) {
-        return -WTERMSIG(status);
-    } else {
-        // Should never happen - waitpid(2) says "One of the first three macros will evaluate to a non-zero (true) value".
-        return 0;
+    pid_t result;
+    do {
+        result = waitpid(pid, &status, 0);
+    } while (result < 0 && errno == EINTR);
+
+    if (result < 0) {
+        perror("waitpid");
+        return EXIT_FAILURE;
     }
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    if (WIFSIGNALED(status)) return -WTERMSIG(status);
+    return EXIT_FAILURE;
 }
 
 JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_close(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint fileDescriptor)

@@ -1,0 +1,21 @@
+# Colors from the corresponding Termux:Styling palette.
+background = "#32302F"
+foreground = "#D4BE98"
+
+[ansi]
+0 = "#665C54"
+1 = "#EA6962"
+2 = "#A9B665"
+3 = "#D8A657"
+4 = "#7DAEA3"
+5 = "#D3869B"
+6 = "#89B482"
+7 = "#D4BE98"
+8 = "#928374"
+9 = "#EA6962"
+10 = "#A9B665"
+11 = "#D8A657"
+12 = "#7DAEA3"
+13 = "#D3869B"
+14 = "#89B482"
+15 = "#D4BE98"

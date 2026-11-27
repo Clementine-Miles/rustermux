@@ -1,7 +1,6 @@
 package com.termux.shared.termux.shell.command.runner.terminal;
 
 import android.content.Context;
-import android.system.OsConstants;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -183,34 +182,6 @@ public class TermuxSession {
             return;
 
         TermuxSession.processTermuxSessionResult(this, null);
-    }
-
-    /**
-     * Kill this {@link TermuxSession} by sending a {@link OsConstants#SIGKILL} to its {@link #mTerminalSession}
-     * if its still executing.
-     *
-     * @param context The {@link Context} for operations.
-     * @param processResult If set to {@code true}, then the {@link #processTermuxSessionResult(TermuxSession, ExecutionCommand)}
-     *                      will be called to process the failure.
-     */
-    public void killIfExecuting(@NonNull final Context context, boolean processResult) {
-        // If execution command has already finished executing, then no need to process results or send SIGKILL
-        if (mExecutionCommand.hasExecuted()) {
-            Logger.logDebug(LOG_TAG, "Ignoring sending SIGKILL to \"" + mExecutionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession since it has already finished executing");
-            return;
-        }
-
-        Logger.logDebug(LOG_TAG, "Send SIGKILL to \"" + mExecutionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession");
-        if (mExecutionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), context.getString(R.string.error_sending_sigkill_to_process))) {
-            if (processResult) {
-                mExecutionCommand.resultData.exitCode = 137; // SIGKILL
-
-                TermuxSession.processTermuxSessionResult(this, null);
-            }
-        }
-
-        // Send SIGKILL to process
-        mTerminalSession.finishIfRunning();
     }
 
     /**

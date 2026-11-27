@@ -11,7 +11,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -19,7 +18,6 @@ import android.text.TextUtils;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.RemoteInput;
-import androidx.core.content.ContextCompat;
 import androidx.core.util.Pair;
 
 import com.termux.api.TermuxAPIConstants;
@@ -59,15 +57,13 @@ public class NotificationAPI {
             public void writeResult(PrintWriter out) {
                 NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    NotificationChannel channel = new NotificationChannel(getPlatformChannelId(CHANNEL_ID),
-                            CHANNEL_TITLE, priorityFromIntent(intent));
-                    manager.createNotificationChannel(channel);
-                    String customChannelId = intent.getStringExtra("channel");
-                    if (customChannelId != null && manager.getNotificationChannel(getPlatformChannelId(customChannelId)) == null) {
-                        out.println("Notification channel not found.");
-                        return;
-                    }
+                NotificationChannel channel = new NotificationChannel(getPlatformChannelId(CHANNEL_ID),
+                        CHANNEL_TITLE, priorityFromIntent(intent));
+                manager.createNotificationChannel(channel);
+                String customChannelId = intent.getStringExtra("channel");
+                if (customChannelId != null && manager.getNotificationChannel(getPlatformChannelId(customChannelId)) == null) {
+                    out.println("Notification channel not found.");
+                    return;
                 }
 
                 intent.putExtra(EXTRA_CONTENT, inputString);
@@ -83,11 +79,6 @@ public class NotificationAPI {
         Logger.logDebug(LOG_TAG, "onReceiveChannel");
 
         ResultReturner.returnData(apiReceiver, intent, out -> {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                out.println("Notification channels are only available on Android 8.0 and higher, use the options for termux-notification instead.");
-                return;
-            }
-
             String channelId = intent.getStringExtra("id");
             if (TextUtils.isEmpty(channelId)) {
                 out.println("Channel id not specified.");
@@ -123,8 +114,7 @@ public class NotificationAPI {
     }
 
     private static boolean postNotification(Context context, String id, Notification notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
             return false;
         }
@@ -355,7 +345,7 @@ public class NotificationAPI {
                 PendingIntent.getBroadcast(context,
                         buttonNum,
                         getMessageReplyIntent(context, intent, buttonNum, buttonAction, notificationId),
-                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntentUtils.getPendingIntentMutableFlag());
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
 
         // Create the reply action and add the remote input.
         return new NotificationCompat.Action.Builder(NotificationIcons.DEFAULT,

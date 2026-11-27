@@ -8,20 +8,17 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.os.Build;
+import android.content.pm.Signature;
 import android.os.UserHandle;
 import android.os.UserManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.reflection.ReflectionUtils;
 
-import java.lang.reflect.Field;
 import java.security.MessageDigest;
 import java.util.List;
 
@@ -74,7 +71,7 @@ public class PackageUtils {
     @Nullable
     public static PackageInfo getPackageInfoForPackage(@NonNull final Context context, @NonNull final String packageName, final int flags) {
         try {
-            return context.getPackageManager().getPackageInfo(packageName, flags);
+            return context.getPackageManager().getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(flags));
         } catch (final Exception e) {
             return null;
         }
@@ -106,119 +103,11 @@ public class PackageUtils {
     @Nullable
     public static ApplicationInfo getApplicationInfoForPackage(@NonNull final Context context, @NonNull final String packageName, final int flags) {
         try {
-            return context.getPackageManager().getApplicationInfo(packageName, flags);
+            return context.getPackageManager().getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(flags));
         } catch (final Exception e) {
             return null;
         }
     }
-
-    /**
-     * Get the {@code privateFlags} {@link Field} of the {@link ApplicationInfo} class.
-     *
-     * @param applicationInfo The {@link ApplicationInfo} for the package.
-     * @return Returns the private flags or {@code null} if an exception was raised.
-     */
-    @Nullable
-    public static Integer getApplicationInfoPrivateFlagsForPackage(@NonNull final ApplicationInfo applicationInfo) {
-        ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
-        try {
-            return (Integer) ReflectionUtils.invokeField(ApplicationInfo.class, "privateFlags", applicationInfo).value;
-        } catch (Exception e) {
-            // ClassCastException may be thrown
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to get privateFlags field value for ApplicationInfo class", e);
-            return null;
-        }
-    }
-
-    /**
-     * Get the {@code seInfo} {@link Field} of the {@link ApplicationInfo} class.
-     *
-     * String retrieved from the seinfo tag found in selinux policy. This value can be set through
-     * the mac_permissions.xml policy construct. This value is used for setting an SELinux security
-     * context on the process as well as its data directory.
-     *
-     * https://cs.android.com/android/platform/superproject/+/android-7.1.0_r1:frameworks/base/core/java/android/content/pm/ApplicationInfo.java;l=609
-     * https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/content/pm/ApplicationInfo.java;l=981
-     * https://cs.android.com/android/platform/superproject/+/android-7.0.0_r1:frameworks/base/services/core/java/com/android/server/pm/SELinuxMMAC.java;l=282
-     * https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/services/core/java/com/android/server/pm/SELinuxMMAC.java;l=375
-     * https://cs.android.com/android/_/android/platform/frameworks/base/+/be0b8896d1bc385d4c8fb54c21929745935dcbea
-     *
-     * @param applicationInfo The {@link ApplicationInfo} for the package.
-     * @return Returns the selinux info or {@code null} if an exception was raised.
-     */
-    @Nullable
-    public static String getApplicationInfoSeInfoForPackage(@NonNull final ApplicationInfo applicationInfo) {
-        ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
-        try {
-            return (String) ReflectionUtils.invokeField(ApplicationInfo.class, Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? "seinfo" : "seInfo", applicationInfo).value;
-        } catch (Exception e) {
-            // ClassCastException may be thrown
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to get seInfo field value for ApplicationInfo class", e);
-            return null;
-        }
-    }
-
-    /**
-     * Get the {@code seInfoUser} {@link Field} of the {@link ApplicationInfo} class.
-     *
-     * Also check {@link #getApplicationInfoSeInfoForPackage(ApplicationInfo)}.
-     *
-     * @param applicationInfo The {@link ApplicationInfo} for the package.
-     * @return Returns the selinux info user or {@code null} if an exception was raised.
-     */
-    @Nullable
-    public static String getApplicationInfoSeInfoUserForPackage(@NonNull final ApplicationInfo applicationInfo) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
-        ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
-        try {
-            return (String) ReflectionUtils.invokeField(ApplicationInfo.class, "seInfoUser", applicationInfo).value;
-        } catch (Exception e) {
-            // ClassCastException may be thrown
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to get seInfoUser field value for ApplicationInfo class", e);
-            return null;
-        }
-    }
-
-    /**
-     * Get the {@code privateFlags} {@link Field} of the {@link ApplicationInfo} class.
-     *
-     * @param fieldName The name of the field to get.
-     * @return Returns the field value or {@code null} if an exception was raised.
-     */
-    @Nullable
-    public static Integer getApplicationInfoStaticIntFieldValue(@NonNull String fieldName) {
-        ReflectionUtils.bypassHiddenAPIReflectionRestrictions();
-        try {
-            return (Integer) ReflectionUtils.invokeField(ApplicationInfo.class, fieldName, null).value;
-        } catch (Exception e) {
-            // ClassCastException may be thrown
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to get \"" + fieldName + "\" field value for ApplicationInfo class", e);
-            return null;
-        }
-    }
-
-    /**
-     * Check if the app associated with the {@code applicationInfo} has a specific flag set.
-     *
-     * @param flagToCheckName The name of the field for the flag to check.
-     * @param applicationInfo The {@link ApplicationInfo} for the package.
-     * @return Returns {@code true} if app has flag is set, otherwise {@code false}. This will be
-     * {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static Boolean isApplicationInfoPrivateFlagSetForPackage(@NonNull String flagToCheckName, @NonNull final ApplicationInfo applicationInfo) {
-        Integer privateFlags = getApplicationInfoPrivateFlagsForPackage(applicationInfo);
-        if (privateFlags == null) return null;
-
-        Integer flagToCheck = getApplicationInfoStaticIntFieldValue(flagToCheckName);
-        if (flagToCheck == null) return null;
-
-        return ( 0 != ( privateFlags & flagToCheck ) );
-    }
-
-
-
-
 
     /**
      * Get the app name for the package associated with the {@code context}.
@@ -380,36 +269,6 @@ public class PackageUtils {
 
 
     /**
-     * Check if the app associated with the {@code context} has
-     * ApplicationInfo.PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE (requestLegacyExternalStorage)
-     * set to {@code true} in app manifest.
-     *
-     * @param context The {@link Context} for the package.
-     * @return Returns {@code true} if app has requested legacy external storage, otherwise
-     * {@code false}. This will be {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static Boolean hasRequestedLegacyExternalStorage(@NonNull final Context context) {
-        return hasRequestedLegacyExternalStorage(context.getApplicationInfo());
-    }
-
-    /**
-     * Check if the app associated with the {@code applicationInfo} has
-     * ApplicationInfo.PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE (requestLegacyExternalStorage)
-     * set to {@code true} in app manifest.
-     *
-     * @param applicationInfo The {@link ApplicationInfo} for the package.
-     * @return Returns {@code true} if app has requested legacy external storage, otherwise
-     * {@code false}. This will be {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static Boolean hasRequestedLegacyExternalStorage(@NonNull final ApplicationInfo applicationInfo) {
-        return isApplicationInfoPrivateFlagSetForPackage("PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE", applicationInfo);
-    }
-
-
-
-    /**
      * Get the {@code versionCode} for the package associated with the {@code context}.
      *
      * @param context The {@link Context} for the package.
@@ -503,17 +362,11 @@ public class PackageUtils {
     @Nullable
     public static String getSigningCertificateSHA256DigestForPackage(@NonNull final Context context, @NonNull final String packageName) {
         try {
-            /*
-             * Todo: We may need AndroidManifest queries entries if package is installed but with a different signature on android 11
-             * https://developer.android.com/training/package-visibility
-             * Need a device that allows (manual) installation of apk with mismatched signature of
-             * sharedUserId apps to test. Currently, if its done, PackageManager just doesn't load
-             * the package and removes its apk automatically if its installed as a user app instead of system app
-             * W/PackageManager: Failed to parse /path/to/com.example.app.apk: Signature mismatch for shared user: SharedUserSetting{xxxxxxx com.termux/10xxx}
-             */
-            PackageInfo packageInfo = getPackageInfoForPackage(context, packageName, PackageManager.GET_SIGNATURES);
-            if (packageInfo == null) return null;
-            return DataUtils.bytesToHex(MessageDigest.getInstance("SHA-256").digest(packageInfo.signatures[0].toByteArray()));
+            PackageInfo info = getPackageInfoForPackage(context, packageName, PackageManager.GET_SIGNING_CERTIFICATES);
+            if (info == null || info.signingInfo == null) return null;
+            Signature[] signers = info.signingInfo.getApkContentsSigners();
+            if (signers == null || signers.length == 0) return null;
+            return DataUtils.bytesToHex(MessageDigest.getInstance("SHA-256").digest(signers[0].toByteArray()));
         } catch (final Exception e) {
             return null;
         }
@@ -527,7 +380,6 @@ public class PackageUtils {
      * @param context The {@link Context} for the package.
      * @return Returns the serial number. This will be {@code null} if failed to get it.
      */
-    @RequiresApi(api = Build.VERSION_CODES.N)
     @Nullable
     public static Long getUserIdForPackage(@NonNull Context context) {
         UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
@@ -542,7 +394,6 @@ public class PackageUtils {
      * @param context The {@link Context} for operations.
      * @return Returns {@code true} if the current user is the primary user, otherwise [@code false}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.N)
     public static boolean isCurrentUserThePrimaryUser(@NonNull Context context) {
         Long userId = getUserIdForPackage(context);
         return userId != null && userId == 0;

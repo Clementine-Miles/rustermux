@@ -5,7 +5,6 @@ SCRIPTNAME=termux-fingerprint
 show_usage () {
     echo "Usage: $SCRIPTNAME [-t title] [-d description] [-s subtitle] [-c cancel]"
     echo "Use fingerprint sensor on device to check for authentication"
-    echo "NOTE: Only available on Marshmallow and later"
     exit 0
 }
 

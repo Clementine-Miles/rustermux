@@ -11,6 +11,8 @@ import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.MediaStore;
 import android.webkit.MimeTypeMap;
 
@@ -24,6 +26,7 @@ import com.termux.shared.termux.TermuxConstants;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Locale;
 
 import androidx.annotation.NonNull;
@@ -73,9 +76,11 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
             return;
         }
 
-        final File fileToShare = new File(filePath);
-        if (!(fileToShare.isFile() && fileToShare.canRead())) {
-            Logger.logError(LOG_TAG, "Not a readable file: '" + fileToShare.getAbsolutePath() + "'");
+        final File fileToShare;
+        try {
+            fileToShare = resolveSharedFile(context, filePath);
+        } catch (IOException e) {
+            Logger.logError(LOG_TAG, e.getMessage());
             return;
         }
 
@@ -116,6 +121,45 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
         } catch (ActivityNotFoundException e) {
             Logger.logError(LOG_TAG, "No app handles the url " + data);
         }
+    }
+
+    /** Resolve the file again at open time so URI grants cannot follow links outside allowed roots. */
+    public static File resolveSharedFile(Context context, String path) throws IOException {
+        if (path == null) throw new FileNotFoundException("Missing shared path");
+
+        File file = new File(path).getCanonicalFile();
+        Path canonical = file.toPath();
+        if (file.isFile() && file.canRead()) {
+            if (isDescendant(canonical, context.getFilesDir())) return file;
+            for (File directory : context.getExternalFilesDirs(null)) {
+                if (directory != null && isDescendant(canonical, directory)) return file;
+            }
+            StorageManager storage = context.getSystemService(StorageManager.class);
+            if (storage != null) {
+                for (StorageVolume volume : storage.getStorageVolumes()) {
+                    File directory = volume.getDirectory();
+                    if (directory != null && isVolumeFile(canonical, directory)) return file;
+                }
+            }
+            if (isVolumeFile(canonical, Environment.getExternalStorageDirectory())) return file;
+        }
+        throw new FileNotFoundException("Path does not refer to a readable shared file");
+    }
+
+    private static boolean isDescendant(Path file, File directory) throws IOException {
+        Path root = directory.getCanonicalFile().toPath();
+        return !root.equals(file) && file.startsWith(root);
+    }
+
+    private static boolean isVolumeFile(Path file, File directory) throws IOException {
+        Path root = directory.getCanonicalFile().toPath();
+        if (root.equals(file) || !file.startsWith(root)) return false;
+        Path child = root.relativize(file);
+        if (child.getNameCount() >= 2 && child.getName(0).toString().equalsIgnoreCase("Android")) {
+            String protectedDirectory = child.getName(1).toString();
+            return !protectedDirectory.equalsIgnoreCase("data") && !protectedDirectory.equalsIgnoreCase("obb");
+        }
+        return true;
     }
 
     public static class ContentProvider extends android.content.ContentProvider {
@@ -213,17 +257,7 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
         }
 
         private File getSharedFile(Uri uri) throws IOException {
-            String path = uri.getPath();
-            if (path == null) throw new FileNotFoundException("Missing shared path");
-
-            File file = new File(path).getCanonicalFile();
-            String internalRoot = getContext().getFilesDir().getCanonicalPath() + File.separator;
-            String storageRoot = Environment.getExternalStorageDirectory().getCanonicalPath() + File.separator;
-            if (!(file.getPath().startsWith(internalRoot) || file.getPath().startsWith(storageRoot))
-                || !file.isFile() || !file.canRead()) {
-                throw new FileNotFoundException("Path does not refer to a readable shared file");
-            }
-            return file;
+            return resolveSharedFile(getContext(), uri.getPath());
         }
     }
 

@@ -10,18 +10,11 @@ android {
         implementation "androidx.appcompat:appcompat:1.6.1"
         implementation "androidx.annotation:annotation:1.9.0"
         implementation "androidx.core:core:1.13.1"
-        implementation "org.lsposed.hiddenapibypass:hiddenapibypass:6.1"
-
-        // Do not increment version higher than 2.5 or there
-        // will be runtime exceptions on android < 8
-        // due to missing classes like java.nio.file.Path.
-        implementation "commons-io:commons-io:2.5"
 
         implementation project(":terminal-view")
     }
 
     defaultConfig {
-        compileSdkVersion project.properties.compileSdkVersion.toInteger()
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -30,17 +23,9 @@ android {
         }
     }
 
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-        }
-    }
+    testBuildType "release"
 
     compileOptions {
-        // Flag to enable support for the new language APIs
-        coreLibraryDesugaringEnabled true
-
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -56,8 +41,8 @@ dependencies {
     // AndroidX still pulls the legacy stdlib-jdk7/8 modules. Align them with
     // the stdlib that now contains their classes.
     implementation platform("org.jetbrains.kotlin:kotlin-bom:1.8.22")
+    implementation "org.tomlj:tomlj:1.1.1"
     testImplementation "junit:junit:4.13.2"
     androidTestImplementation "androidx.test.ext:junit:1.1.5"
     androidTestImplementation "androidx.test:runner:1.5.2"
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$desugarJdkLibsVersion"
 }

@@ -9,9 +9,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Menu;
-import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.widget.TextView;
 
@@ -26,6 +26,8 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.models.ReportInfo;
 import com.termux.shared.theme.NightMode;
+import com.termux.shared.view.NativeViews;
+import com.termux.shared.view.UiColors;
 
 
 
@@ -51,6 +53,11 @@ public class ReportActivity extends AppCompatActivity {
     private Bundle mBundle;
 
     private static final String LOG_TAG = "ReportActivity";
+    private static final int SHARE_REPORT = Menu.FIRST;
+    private static final int COPY_REPORT = Menu.FIRST + 1;
+    private static final int SAVE_REPORT = Menu.FIRST + 2;
+
+    private TextView reportText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,12 +66,17 @@ public class ReportActivity extends AppCompatActivity {
 
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
 
-        setContentView(R.layout.activity_report);
-
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        if (toolbar != null) {
-            setSupportActionBar(toolbar);
-        }
+        reportText = new TextView(this);
+        reportText.setTypeface(Typeface.MONOSPACE);
+        reportText.setTextIsSelectable(true);
+        int padding = NativeViews.dp(this, 16);
+        reportText.setPadding(padding, padding, padding, padding);
+        Toolbar toolbar = NativeViews.showScrollPage(this, reportText);
+        AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
+        UiColors colors = UiColors.resolve(this);
+        colors.style(toolbar);
+        reportText.setBackgroundColor(colors.background);
+        reportText.setTextColor(colors.foreground);
 
         mBundle = null;
         Intent intent = getIntent();
@@ -133,7 +145,6 @@ public class ReportActivity extends AppCompatActivity {
 
         final ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
-            actionBar.setDisplayHomeAsUpEnabled(true);
             if (mReportInfo.reportTitle != null)
                 actionBar.setTitle(mReportInfo.reportTitle);
             else
@@ -142,8 +153,7 @@ public class ReportActivity extends AppCompatActivity {
 
 
         generateReportActivityMarkdownString();
-        TextView report = findViewById(R.id.report_text);
-        report.setText(mReportActivityMarkdownString);
+        reportText.setText(mReportActivityMarkdownString);
     }
 
 
@@ -169,13 +179,10 @@ public class ReportActivity extends AppCompatActivity {
     @Override
     public boolean onCreateOptionsMenu(final Menu menu) {
         if (mReportInfo == null) return false;
-        final MenuInflater inflater = getMenuInflater();
-        inflater.inflate(R.menu.menu_report, menu);
-
-        if (mReportInfo.reportSaveFilePath == null) {
-            MenuItem item = menu.findItem(R.id.menu_item_save_report_to_file);
-            if (item != null)
-                item.setEnabled(false);
+        menu.add(Menu.NONE, SHARE_REPORT, Menu.NONE, R.string.action_share);
+        menu.add(Menu.NONE, COPY_REPORT, Menu.NONE, R.string.action_copy);
+        if (mReportInfo.reportSaveFilePath != null) {
+            menu.add(Menu.NONE, SAVE_REPORT, Menu.NONE, R.string.action_save_to_file);
         }
 
         return true;
@@ -186,11 +193,11 @@ public class ReportActivity extends AppCompatActivity {
         int id = item.getItemId();
         if (id == android.R.id.home) {
             finish();
-        } else if (id == R.id.menu_item_share_report) {
+        } else if (id == SHARE_REPORT) {
             ShareUtils.shareText(this, getString(R.string.title_report_text), ReportInfo.getReportInfoMarkdownString(mReportInfo));
-        } else if (id == R.id.menu_item_copy_report) {
+        } else if (id == COPY_REPORT) {
             ShareUtils.copyTextToClipboard(this, ReportInfo.getReportInfoMarkdownString(mReportInfo), null);
-        } else if (id == R.id.menu_item_save_report_to_file) {
+        } else if (id == SAVE_REPORT) {
             ShareUtils.saveTextToFile(this, mReportInfo.reportSaveFileLabel,
                 mReportInfo.reportSaveFilePath, ReportInfo.getReportInfoMarkdownString(mReportInfo),
                 true, REQUEST_GRANT_STORAGE_PERMISSION_FOR_SAVE_FILE);

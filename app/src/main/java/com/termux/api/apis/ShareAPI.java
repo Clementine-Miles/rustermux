@@ -1,14 +1,9 @@
 package com.termux.api.apis;
 
 import android.content.ClipData;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.database.Cursor;
-import android.database.MatrixCursor;
 import android.net.Uri;
-import android.os.ParcelFileDescriptor;
-import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 
@@ -16,11 +11,11 @@ import com.termux.R;
 import com.termux.api.TermuxAPIConstants;
 import com.termux.api.TermuxApiReceiver;
 import com.termux.api.util.ResultReturner;
+import com.termux.app.TermuxOpenReceiver;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.net.uri.UriUtils;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Locale;
@@ -84,13 +79,9 @@ public class ShareAPI {
             ResultReturner.returnData(apiReceiver, intent, out -> {
                 final File fileToShare;
                 try {
-                    fileToShare = new File(fileExtra).getCanonicalFile();
+                    fileToShare = TermuxOpenReceiver.resolveSharedFile(context, fileExtra);
                 } catch (IOException e) {
-                    out.println("ERROR: Could not resolve file path.");
-                    return;
-                }
-                if (!(fileToShare.isFile() && fileToShare.canRead())) {
-                    out.println("ERROR: Not a readable file: '" + fileToShare.getAbsolutePath() + "'");
+                    out.println("ERROR: " + e.getMessage());
                     return;
                 }
 
@@ -128,78 +119,6 @@ public class ShareAPI {
         return contentType == null ? "application/octet-stream" : contentType;
     }
 
-    public static class ContentProvider extends android.content.ContentProvider {
-
-        @Override
-        public boolean onCreate() {
-            return true;
-        }
-
-        @Override
-        public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
-            File file = new File(uri.getPath());
-            String fileName = file.getName();
-
-            if (projection == null) {
-                projection = new String[]{
-                        MediaStore.MediaColumns.DISPLAY_NAME,
-                        MediaStore.MediaColumns.SIZE,
-                        MediaStore.MediaColumns._ID
-                };
-            }
-
-            Object[] row = new Object[projection.length];
-            for (int i = 0; i < projection.length; i++) {
-                String column = projection[i];
-                Object value;
-                switch (column) {
-                    case MediaStore.MediaColumns.DISPLAY_NAME:
-                        value = file.getName();
-                        break;
-                    case MediaStore.MediaColumns.SIZE:
-                        value = file.length();
-                        break;
-                    case MediaStore.MediaColumns._ID:
-                        value = 1;
-                        break;
-                    default:
-                        value = null;
-                }
-                row[i] = value;
-            }
-
-            MatrixCursor cursor = new MatrixCursor(projection);
-            cursor.addRow(row);
-            return cursor;
-        }
-
-        @Override
-        public String getType(Uri uri) {
-            String path = uri.getPath();
-            return path == null ? null : getMimeType(new File(path).getName());
-        }
-
-        @Override
-        public Uri insert(Uri uri, ContentValues values) {
-            return null;
-        }
-
-        @Override
-        public int delete(Uri uri, String selection, String[] selectionArgs) {
-            return 0;
-        }
-
-        @Override
-        public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
-            return 0;
-        }
-
-        @Override
-        public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-            String path = uri.getPath();
-            if (!"r".equals(mode) || path == null) throw new FileNotFoundException("Share files are read-only");
-            return ParcelFileDescriptor.open(new File(path), ParcelFileDescriptor.MODE_READ_ONLY);
-        }
-    }
-
+    /** Keeps the integrated API's existing URI authority and the same read-only grant policy. */
+    public static class ContentProvider extends TermuxOpenReceiver.ContentProvider {}
 }

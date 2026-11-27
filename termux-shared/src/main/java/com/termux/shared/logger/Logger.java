@@ -447,11 +447,8 @@ public class Logger {
         return DEFAULT_LOG_TAG;
     }
 
-    /**
-     * IllegalArgumentException will be thrown if tag.length() > 23 for Nougat (7.0) and prior releases.
-     * https://developer.android.com/reference/android/util/Log#isLoggable(java.lang.String,%20int) */
     public static void setDefaultLogTag(@NonNull String defaultLogTag) {
-        DEFAULT_LOG_TAG = defaultLogTag.length() >= 23 ? defaultLogTag.substring(0, 22) : defaultLogTag;
+        DEFAULT_LOG_TAG = defaultLogTag;
     }
 
 

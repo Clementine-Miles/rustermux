@@ -2,270 +2,169 @@ package com.termux.terminal;
 
 import android.graphics.Bitmap;
 
-/**
- * A terminal sixel received via `DCS q s..s ST` or `DCS P1; P2; P3; q s..s ST`.
- *
- * **See Also:**
- * - `TerminalEmulator.ESC_DCS__SIXEL`
- * - https://vt100.net/docs/vt3xx-gp/chapter14.html
- * - https://en.wikipedia.org/wiki/Sixel
- * - https://www.digiater.nl/openvms/decus/vax90b1/krypton-nasa/all-about-sixels.text
- */
-public class TerminalSixel {
+import java.util.Arrays;
 
-    public static final String LOG_TAG = "TerminalSixel";
+/** Incremental Sixel decoder for DCS q ... ST. */
+final class TerminalSixel {
 
-
-
-    public static final int[] SIXEL__INITIAL_COLOR_MAP = {
+    private static final int[] INITIAL_COLORS = {
         0xFF000000, 0xFF3333CC, 0xFFCC2323, 0xFF33CC33, 0xFFCC33CC, 0xFF33CCCC, 0xFFCCCC33, 0xFF777777,
         0xFF444444, 0xFF565699, 0xFF994444, 0xFF569956, 0xFF995699, 0xFF569999, 0xFF999956, 0xFFCCCCCC
     };
 
-    /**
-     * A sixel is a group of six pixels in a vertical column.
-     */
-    public static final int SIXEL__LINE_LEN = 6;
+    private static final int SIXEL_HEIGHT = 6;
+    private static final int MAX_REPEAT = 8192;
+    private static final int INITIAL_DIMENSION = 100;
 
-    /**
-     * The amount of extra dimension added when resizing a sixel when receiving more image data.
-     */
-    public static final int SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION = 100;
+    private final TerminalSessionClient client;
+    private final int[] colors = Arrays.copyOf(INITIAL_COLORS, 256);
+    private final int[] arguments = new int[5];
 
-    /**
-     * The max value for the sixel Graphics Repeat Introducer.
-     *
-     * The value `8192` can support 8K images, see also {@link TerminalBitmap#MAX_BITMAP_SIZE}.
-     *
-     * Each repeat creates a new sixel line of `1x6` pixels, where `6` is the {@link #SIXEL__LINE_LEN}.
-     *
-     *  - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.1
-     */
-    public static final int SIXEL__MAX_REPEAT = 8192;
+    private Bitmap bitmap;
+    private int color = INITIAL_COLORS[0];
+    private int column;
+    private int row;
+    private int width;
+    private int height;
+    private int command;
+    private int argumentIndex;
+    private boolean hasDigits;
 
-
-
-    protected final TerminalSessionClient mClient;
-
-    protected Bitmap mBitmap;
-
-    protected int mWidth;
-    protected int mHeight;
-
-    protected int mCurX;
-    protected int mCurY;
-
-    protected final int[] mColorMap;
-    protected int mColor;
-
-
-
-    protected TerminalSixel(TerminalSessionClient client, Bitmap bitmap) {
-        mClient = client;
-
-        mBitmap = bitmap;
-
-        mWidth = 0;
-        mHeight = 0;
-
-        mCurX = 0;
-        mCurY = 0;
-
-        mColorMap = new int[256];
-        System.arraycopy(SIXEL__INITIAL_COLOR_MAP, 0, mColorMap, 0, 16);
-        mColor = mColorMap[0];
+    TerminalSixel(TerminalSessionClient client) {
+        this.client = client;
     }
 
-
-
-    public static TerminalSixel build(TerminalSessionClient client, int bitmapWidth, int bitmapHeight) {
-        try {
-
-            Bitmap bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888);
-            bitmap.eraseColor(0);
-
-            return new TerminalSixel(client, bitmap);
-        } catch (Throwable t) {
-            if (t instanceof OutOfMemoryError) System.gc();
-            Logger.logError(client, LOG_TAG, "Create sixel bitmap for" +
-                " width " + bitmapWidth + " with height " + bitmapHeight + " failed: " + t.getMessage());
-            return null;
-        }
+    Bitmap getBitmap() {
+        return bitmap;
     }
 
-
-
-    public TerminalSessionClient getClient() {
-        return mClient;
+    int getWidth() {
+        return width;
     }
 
-
-    public Bitmap getBitmap() {
-        return mBitmap;
+    int getHeight() {
+        return height;
     }
 
-
-    public int getWidth() {
-        return mWidth;
-    }
-
-    public int getHeight() {
-        return mHeight;
-    }
-
-
-    public int getCurX() {
-        return mCurX;
-    }
-
-    public int getCurY() {
-        return mCurY;
-    }
-
-
-    public int[] getColorMap() {
-        return mColorMap;
-    }
-
-    public int getColor() {
-        return mColor;
-    }
-
-
-
-    public boolean readData(int codePoint, int repeat) {
-        if (mBitmap == null) {
-            return false;
+    boolean read(int codePoint) {
+        if (command != 0) {
+            if (codePoint >= '0' && codePoint <= '9') {
+                int digit = codePoint - '0';
+                int limit = command == '!' ? MAX_REPEAT : Integer.MAX_VALUE;
+                int value = arguments[argumentIndex];
+                if (value > (limit - digit) / 10) return false;
+                arguments[argumentIndex] = value * 10 + digit;
+                hasDigits = true;
+                return true;
+            }
+            if (codePoint == ';') {
+                int maxIndex = command == '#' ? 4 : command == '"' ? 3 : 0;
+                if (argumentIndex == maxIndex) return false;
+                argumentIndex++;
+                hasDigits = false;
+                return true;
+            }
+            if (command == '!') {
+                if (codePoint == ' ') return true;
+                command = 0;
+                return hasDigits && isSixelData(codePoint) && draw(codePoint, arguments[0]);
+            }
+            if (!finish()) return false;
         }
 
-        if (repeat > TerminalSixel.SIXEL__MAX_REPEAT) {
-            Logger.logError(mClient, LOG_TAG, "The sixel repeat value " + repeat + " is greater than max repeat value " + TerminalSixel.SIXEL__MAX_REPEAT);
-            return false;
-        }
-
-        // Graphics Carriage Return `$`.
-        // > The $ (2/4) character indicates the end of the sixel line. The active position returns
-        // > to the left page border of the same sixel line. You can use this character to overprint lines.
-        // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.4
-        if (codePoint == '$') {
-            mCurX = 0;
-            return true;
-        }
-
-        // Graphics New Line `-`.
-        // > The - (2/13) character indicates the end of a sixel line. The active position moves to
-        // > the left margin of the next sixel line.
-        // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.5
-        if (codePoint == '-') {
-            mCurX = 0;
-            mCurY += SIXEL__LINE_LEN;
-            return true;
-        }
-
-        if (mBitmap.getWidth() < mCurX + repeat) {
-            int newBitmapWidth = mCurX + repeat + SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION;
-
-            if (newBitmapWidth < 0) {
-                Logger.logError(mClient, LOG_TAG, "The new sixel bitmap width overflowed: " +
-                    mCurX + " (cursor x) + " + repeat + " (repeat) + " + SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION);
+        if (isSixelData(codePoint)) return draw(codePoint, 1);
+        switch (codePoint) {
+            case '$': // Graphics carriage return.
+                column = 0;
+                return true;
+            case '-': // Next group of six rows.
+                column = 0;
+                row += SIXEL_HEIGHT;
+                return row < TerminalBitmap.MAX_DIMENSION;
+            case '#':
+            case '"':
+            case '!':
+                command = codePoint;
+                argumentIndex = 0;
+                hasDigits = false;
+                Arrays.fill(arguments, 0);
+                return true;
+            case ' ':
+                return true;
+            default:
                 return false;
-            }
-
-            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, newBitmapWidth, mBitmap.getHeight());
-            if (mBitmap == null) {
-                return false;
-            }
         }
+    }
 
-        if (mBitmap.getHeight() < mCurY + SIXEL__LINE_LEN) {
-            // Very unlikely to resize both at the same time.
-            int newBitmapHeight = mCurY + SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION;
-
-            if (newBitmapHeight < 0) {
-                Logger.logError(mClient, LOG_TAG, "The new sixel bitmap height overflowed: " +
-                    mCurY + " (cursor y) + " + SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION);
-                return false;
-            }
-
-            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, mBitmap.getWidth(), newBitmapHeight);
-            if (mBitmap == null) {
-                return false;
-            }
-        }
-
-        if (mCurX + repeat > mBitmap.getWidth()) {
-            repeat = mBitmap.getWidth() - mCurX;
-        }
-
-        if (mCurY + SIXEL__LINE_LEN > mBitmap.getHeight()) {
-            Logger.logError(mClient, LOG_TAG, "The sixel curson y position " +
-                mCurY + SIXEL__LINE_LEN + " is greater than bitmap height " + mBitmap.getHeight());
-            return false;
-        }
-
-        // Sixel data characters are in the range of `?` (0x3F) to `~` (0x7E).
-        // > Each sixel data character represents six vertical pixels of data. Each sixel data character
-        // > represents a binary value equal to the character code value minus hex 3F.
-        // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.2.1
-        if (repeat > 0 && codePoint >= '?' && codePoint <= '~') {
-            int b = codePoint - '?';
-            if (mCurY + SIXEL__LINE_LEN > mHeight) {
-                mHeight = mCurY + SIXEL__LINE_LEN;
-            }
-
-            while (repeat-- > 0) {
-                for (int i = 0; i < SIXEL__LINE_LEN; i++) {
-                    if ((b & (1 << i)) != 0) {
-                        mBitmap.setPixel(mCurX, mCurY + i, mColor);
+    boolean finish() {
+        int current = command;
+        command = 0;
+        switch (current) {
+            case '#':
+                int index = arguments[0];
+                if (index >= colors.length) return false;
+                if (argumentIndex > 0) {
+                    // The existing terminal supports RGB percentage color definitions.
+                    if (argumentIndex != 4 || !hasDigits || arguments[1] != 2 ||
+                        arguments[2] > 100 || arguments[3] > 100 || arguments[4] > 100) {
+                        return false;
                     }
+                    colors[index] = 0xff000000 | (arguments[2] * 255 / 100) << 16 |
+                        (arguments[3] * 255 / 100) << 8 | (arguments[4] * 255 / 100);
                 }
+                color = colors[index];
+                return true;
+            case '"':
+                if (argumentIndex != 3 || !hasDigits) return false;
+                int rasterWidth = arguments[2];
+                int rasterHeight = arguments[3];
+                return rasterWidth == 0 || rasterHeight == 0 || ensureBitmap(rasterWidth, rasterHeight);
+            case '!':
+                return false; // A repeat must be followed by a Sixel character.
+            default:
+                return true;
+        }
+    }
 
-                mCurX += 1;
-                if (mCurX > mWidth) {
-                    mWidth = mCurX;
-                }
+    private static boolean isSixelData(int codePoint) {
+        return codePoint >= '?' && codePoint <= '~';
+    }
+
+    private boolean draw(int codePoint, int repeat) {
+        if (repeat == 0) return true;
+        int nextColumn = column + repeat;
+        int nextRow = row + SIXEL_HEIGHT;
+        if (!ensureBitmap(nextColumn, nextRow)) return false;
+
+        int pixels = codePoint - '?';
+        for (; column < nextColumn; column++) {
+            for (int pixel = 0; pixel < SIXEL_HEIGHT; pixel++) {
+                if ((pixels & (1 << pixel)) != 0) bitmap.setPixel(column, row + pixel, color);
             }
         }
-
+        width = Math.max(width, nextColumn);
+        height = Math.max(height, nextRow);
         return true;
     }
 
-    public boolean resize(int sixelWidth, int sixelHeight) {
-        if (mBitmap == null) {
-            return false;
+    private boolean ensureBitmap(int minimumWidth, int minimumHeight) {
+        if (!TerminalBitmap.canAllocate(minimumWidth, minimumHeight)) return false;
+        int oldWidth = bitmap == null ? 0 : bitmap.getWidth();
+        int oldHeight = bitmap == null ? 0 : bitmap.getHeight();
+        if (oldWidth >= minimumWidth && oldHeight >= minimumHeight) return true;
+
+        int newWidth = grownDimension(oldWidth, minimumWidth);
+        int newHeight = grownDimension(oldHeight, minimumHeight);
+        if (!TerminalBitmap.canAllocate(newWidth, newHeight)) {
+            newWidth = Math.max(oldWidth, minimumWidth);
+            newHeight = Math.max(oldHeight, minimumHeight);
         }
-
-        if (sixelWidth < 1 || sixelHeight < 1)
-            return false;
-
-        int bitmapWidth = mBitmap.getWidth();
-        int newBitmapWidth = Math.max(sixelWidth, bitmapWidth);
-
-        int bitmapHeight = mBitmap.getHeight();
-        int newBitmapHeight = Math.max(sixelHeight, bitmapHeight);
-
-        if (bitmapWidth < newBitmapWidth || bitmapHeight < newBitmapHeight) {
-            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, newBitmapWidth, newBitmapHeight);
-            return mBitmap != null;
-        }
-
-        return true;
+        bitmap = TerminalBitmap.resize(client, bitmap, newWidth, newHeight);
+        return bitmap != null;
     }
 
-    public void setColor(int color) {
-        if (color >= 0 && color < mColorMap.length) {
-            mColor = mColorMap[color];
-        }
+    private static int grownDimension(int oldSize, int minimumSize) {
+        return oldSize >= minimumSize ? oldSize :
+            Math.max(minimumSize, Math.min(TerminalBitmap.MAX_DIMENSION, Math.max(INITIAL_DIMENSION, oldSize + oldSize / 2)));
     }
-
-    public void setRGBColor(int color, int r, int g, int b) {
-        if (color >= 0 && color < mColorMap.length) {
-            int red = Math.min(255, r * 255/100);
-            int green = Math.min(255, g * 255/100);
-            int blue = Math.min(255, b * 255/100);
-            mColor = 0xff000000 + (red << 16) + (green << 8) + blue;
-            mColorMap[color] = mColor;
-        }
-    }
-
 }

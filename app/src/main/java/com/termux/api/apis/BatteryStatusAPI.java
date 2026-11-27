@@ -161,10 +161,8 @@ public class BatteryStatusAPI {
                 putIntegerIfSet(out, "scale", batteryScale);
                 putIntegerIfSet(out, "charge_counter", getIntProperty(batteryManager, BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER));
                 putLongIfSet(out, "energy", getLongProperty(batteryManager, BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER));
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    int batteryCycle = batteryStatus.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1);
-                    putIntegerIfSet(out, "cycle", batteryCycle != -1 ? batteryCycle : null);
-                }
+                int batteryCycle = batteryStatus.getIntExtra(BatteryManager.EXTRA_CYCLE_COUNT, -1);
+                putIntegerIfSet(out, "cycle", batteryCycle != -1 ? batteryCycle : null);
                 out.endObject();
             }
         });

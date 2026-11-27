@@ -4,8 +4,6 @@ import android.annotation.SuppressLint;
 
 
 import java.io.File;
-import java.util.Arrays;
-import java.util.List;
 
 /* SPDX-License-Identifier: MIT */
 
@@ -17,10 +15,6 @@ public final class TermuxConstants {
     public static final String TERMUX_PACKAGE_NAME = "com.termux";
     public static final String TERMUX_GITHUB_ISSUES_REPO_URL =
         "https://github.com/Clementine-Miles/rustermux/issues";
-
-    /** Signer used by existing debug builds. Retains the shell release marker. */
-    public static final String TERMUX_DEBUG_SIGNER_SHA256 =
-        "B6DA01480EEFD5FBF2CD3771B8D1021EC791304BDD6C4BF41D3FAABAD48EE5E1";
 
     /*
      * Termux app core directory paths.
@@ -139,43 +133,13 @@ public final class TermuxConstants {
     public static final File TERMUX_APPS_DIR = new File(TERMUX_APPS_DIR_PATH);
 
 
-    /** Termux app $PREFIX directory path ignored sub file paths to consider it empty */
-    public static final List<String> TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY = Arrays.asList(
-        TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, TermuxConstants.TERMUX_ENV_TEMP_FILE_PATH, TermuxConstants.TERMUX_ENV_FILE_PATH);
-
-
 
     /*
-     * Termux app preferences and properties file paths.
+     * Termux app operational preferences and diagnostics.
      */
 
     /** Termux app default SharedPreferences file basename without extension */
     public static final String TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION = TERMUX_PACKAGE_NAME + "_preferences"; // Default: "com.termux_preferences"
-
-
-    /** Termux app properties primary file path */
-    public static final String TERMUX_PROPERTIES_PRIMARY_FILE_PATH = TERMUX_DATA_HOME_DIR_PATH + "/termux.properties"; // Default: "/data/data/com.termux/files/home/.termux/termux.properties"
-    /** Termux app properties primary file */
-    public static final File TERMUX_PROPERTIES_PRIMARY_FILE = new File(TERMUX_PROPERTIES_PRIMARY_FILE_PATH);
-
-    /** Termux app properties secondary file path */
-    public static final String TERMUX_PROPERTIES_SECONDARY_FILE_PATH = TERMUX_CONFIG_HOME_DIR_PATH + "/termux.properties"; // Default: "/data/data/com.termux/files/home/.config/termux/termux.properties"
-    /** Termux app properties secondary file */
-    public static final File TERMUX_PROPERTIES_SECONDARY_FILE = new File(TERMUX_PROPERTIES_SECONDARY_FILE_PATH);
-
-    /** Look for the existing Termux configuration before the XDG location. */
-    public static final List<String> TERMUX_PROPERTIES_FILE_PATHS_LIST = Arrays.asList(
-        TERMUX_PROPERTIES_PRIMARY_FILE_PATH, TERMUX_PROPERTIES_SECONDARY_FILE_PATH);
-
-    /** User's terminal colors.properties file path */
-    public static final String TERMUX_COLOR_PROPERTIES_FILE_PATH = TERMUX_DATA_HOME_DIR_PATH + "/colors.properties"; // Default: "/data/data/com.termux/files/home/.termux/colors.properties"
-    /** User's terminal colors.properties file */
-    public static final File TERMUX_COLOR_PROPERTIES_FILE = new File(TERMUX_COLOR_PROPERTIES_FILE_PATH);
-
-    /** User's terminal font.ttf file path */
-    public static final String TERMUX_FONT_FILE_PATH = TERMUX_DATA_HOME_DIR_PATH + "/font.ttf"; // Default: "/data/data/com.termux/files/home/.termux/font.ttf"
-    /** User's terminal font.ttf file */
-    public static final File TERMUX_FONT_FILE = new File(TERMUX_FONT_FILE_PATH);
 
 
     /** Termux app crash log file path */
@@ -265,10 +229,6 @@ public final class TermuxConstants {
             /** Intent {@code String} extra for what to reload for the TERMUX_ACTIVITY.ACTION_RELOAD_STYLE intent. This has been deperecated. */
             @Deprecated
             public static final String EXTRA_RELOAD_STYLE = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.reload_style"; // Default: "com.termux.app.reload_style"
-
-            /**  Intent {@code boolean} extra for whether to recreate activity for the TERMUX_ACTIVITY.ACTION_RELOAD_STYLE intent. */
-            public static final String EXTRA_RECREATE_ACTIVITY = TERMUX_APP.TERMUX_ACTIVITY_NAME + ".EXTRA_RECREATE_ACTIVITY"; // Default: "com.termux.app.TermuxActivity.EXTRA_RECREATE_ACTIVITY"
-
 
             /** Intent action to make termux request storage permissions */
             public static final String ACTION_REQUEST_PERMISSIONS = TermuxConstants.TERMUX_PACKAGE_NAME + ".app.request_storage_permissions"; // Default: "com.termux.app.request_storage_permissions"

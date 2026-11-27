@@ -14,7 +14,6 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
-import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 
 public class TermuxApplication extends Application {
@@ -35,11 +34,10 @@ public class TermuxApplication extends Application {
         Logger.logDebug("Starting Application");
         ResultReturner.setContext(context);
 
-        // Init app wide SharedProperties loaded from termux.properties
+        // Initialize the app-wide configuration snapshot.
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.init(context);
 
         // Init app wide shell manager
-        TermuxShellManager shellManager = TermuxShellManager.init(context);
 
         // Set NightMode.APP_NIGHT_MODE
         TermuxThemeUtils.setAppNightMode(properties.getNightMode());
@@ -76,10 +74,10 @@ public class TermuxApplication extends Application {
     public static void setLogConfig(Context context) {
         Logger.setDefaultLogTag(TermuxConstants.TERMUX_APP_NAME);
 
-        // Load the log level from shared preferences and set it to the {@link Logger.CURRENT_LOG_LEVEL}
+        // Apply the configured log level without writing the configuration.
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
         if (preferences == null) return;
-        preferences.setLogLevel(null, preferences.getLogLevel());
+        Logger.setLogLevel(null, preferences.getLogLevel());
     }
 
 }

@@ -1,6 +1,5 @@
 package com.termux.shared.termux.file;
 
-import static com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH;
 
 import android.content.Context;
 import android.os.Environment;
@@ -324,26 +323,6 @@ public class TermuxFileUtils {
             null, createDirectoryIfMissing,
             FileUtils.APP_WORKING_DIRECTORY_PERMISSIONS, setMissingPermissions, true,
             false, false);
-    }
-
-    /**
-     * If {@link TermuxConstants#TERMUX_PREFIX_DIR_PATH} doesn't exist, is empty or only contains
-     * files in {@link TermuxConstants#TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY}.
-     */
-    public static boolean isTermuxPrefixDirectoryEmpty() {
-        List<String> scaffoldPaths = new ArrayList<>(TermuxConstants.TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY);
-        // A prior installation can be interrupted after a file is removed.
-        // Treat its empty parent directories as scaffolding on the next attempt.
-        scaffoldPaths.add(TermuxConstants.TERMUX_CONFIG_PREFIX_DIR_PATH);
-        scaffoldPaths.add(TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH);
-        Error error = FileUtils.validateDirectoryFileEmptyOrOnlyContainsSpecificFiles("termux prefix",
-            TERMUX_PREFIX_DIR_PATH, scaffoldPaths, true);
-        if (error == null)
-            return true;
-
-        if (!FileUtilsErrno.ERRNO_NON_EMPTY_DIRECTORY_FILE.equalsErrorTypeAndCode(error))
-            Logger.logErrorExtended(LOG_TAG, "Failed to check if termux prefix directory is empty:\n" + error.getErrorLogString());
-        return false;
     }
 
     /**

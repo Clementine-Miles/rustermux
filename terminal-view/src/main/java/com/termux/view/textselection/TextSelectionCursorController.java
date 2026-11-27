@@ -54,12 +54,16 @@ public class TextSelectionCursorController implements CursorController {
 
     @Override
     public boolean hide() {
+        return hide(false);
+    }
+
+    public boolean hide(boolean force) {
         if (!isActive()) return false;
 
         // prevent hide calls right after a show call, like long pressing the down key
         // 300ms seems long enough that it wouldn't cause hide problems if action button
         // is quickly clicked after the show, otherwise decrease it
-        if (System.currentTimeMillis() - mShowStartTime < 300) {
+        if (!force && System.currentTimeMillis() - mShowStartTime < 300) {
             return false;
         }
 
@@ -69,6 +73,7 @@ public class TextSelectionCursorController implements CursorController {
         if (mActionMode != null) {
             // This will hide the TextSelectionCursorController
             mActionMode.finish();
+            mActionMode = null;
         }
 
         mSelX1 = mSelY1 = mSelX2 = mSelY2 = -1;

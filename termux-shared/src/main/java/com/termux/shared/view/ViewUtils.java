@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.os.Build;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -158,16 +157,9 @@ public class ViewUtils {
 
     private static Point getDisplaySize(Context context, boolean activitySize) {
         WindowManager windows = context.getSystemService(WindowManager.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Rect bounds = activitySize ? windows.getCurrentWindowMetrics().getBounds() :
-                windows.getMaximumWindowMetrics().getBounds();
-            return new Point(bounds.width(), bounds.height());
-        }
-
-        Point size = new Point();
-        if (activitySize) windows.getDefaultDisplay().getSize(size);
-        else windows.getDefaultDisplay().getRealSize(size);
-        return size;
+        Rect bounds = activitySize ? windows.getCurrentWindowMetrics().getBounds() :
+            windows.getMaximumWindowMetrics().getBounds();
+        return new Point(bounds.width(), bounds.height());
     }
 
     /** Convert {@link Rect} to {@link String}. */

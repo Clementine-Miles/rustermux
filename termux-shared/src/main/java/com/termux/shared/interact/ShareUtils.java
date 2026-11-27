@@ -1,6 +1,5 @@
 package com.termux.shared.interact;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -11,7 +10,6 @@ import android.net.Uri;
 import android.os.Environment;
 
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
@@ -179,7 +177,7 @@ public class ShareUtils {
      *
      * If if path is under {@link Environment#getExternalStorageDirectory()}
      * or `/sdcard` and storage permission is missing, it will be requested if {@code context} is an
-     * instance of {@link Activity} or {@link AppCompatActivity} and {@code storagePermissionRequestCode}
+     * instance of {@link Activity} and {@code storagePermissionRequestCode}
      * is `>=0` and the function will automatically return. The caller should call this function again
      * if user granted the permission.
      *
@@ -196,16 +194,8 @@ public class ShareUtils {
         // If path is under primary external storage directory, then check for missing permissions.
         if ((FileUtils.isPathInDirPath(filePath, Environment.getExternalStorageDirectory().getAbsolutePath(), true) ||
             FileUtils.isPathInDirPath(filePath, "/sdcard", true)) &&
-            !PermissionUtils.checkPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            Logger.logErrorAndShowToast(context, LOG_TAG, context.getString(R.string.msg_storage_permission_not_granted));
-
-            if (storagePermissionRequestCode >= 0) {
-                if (context instanceof AppCompatActivity)
-                    PermissionUtils.requestPermission(((AppCompatActivity) context), Manifest.permission.WRITE_EXTERNAL_STORAGE, storagePermissionRequestCode);
-                else if (context instanceof Activity)
-                    PermissionUtils.requestPermission(((Activity) context), Manifest.permission.WRITE_EXTERNAL_STORAGE, storagePermissionRequestCode);
-            }
-
+            !PermissionUtils.checkAndRequestLegacyOrManageExternalStoragePermission(
+                context, storagePermissionRequestCode, true)) {
             return;
         }
 

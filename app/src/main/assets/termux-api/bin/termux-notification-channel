@@ -6,7 +6,6 @@ show_usage () {
     echo "Usage: $SCRIPTNAME -d channel-id"
     echo "       $SCRIPTNAME channel-id channel-name"
     echo "Create or delete a notification channel."
-    echo "Only usable on Android 8.0 and higher."
     echo "Use -d to delete a channel."
     echo "Creating a channel requires a channel id and a channel name."
     echo "The name will be visible in the options, the id is used to send notifications on that specific channel."

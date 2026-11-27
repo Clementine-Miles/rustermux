@@ -5,7 +5,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.telephony.CellInfo;
 import android.telephony.CellInfoCdma;
 import android.telephony.CellInfoGsm;
@@ -63,10 +62,9 @@ public class TelephonyAPI {
                 List<CellInfo> cellInfoData = null;
 
                 try {
-                    cellInfoData = manager.getAllCellInfo();
-                } catch (SecurityException e) {
-                    // Direct call of getAllCellInfo() doesn't work on Android 10 (Q).
-                    // https://developer.android.com/reference/android/telephony/TelephonyManager#getAllCellInfo().
+                    if (manager != null) cellInfoData = manager.getAllCellInfo();
+                } catch (SecurityException | UnsupportedOperationException e) {
+                    Logger.logWarn(LOG_TAG, "Cell information unavailable: " + e.getMessage());
                 }
 
                 if (cellInfoData != null) {
@@ -101,19 +99,13 @@ public class TelephonyAPI {
                             writeIfKnown(out, "mcc", lteInfo.getCellIdentity().getMcc());
                             writeIfKnown(out, "mnc", lteInfo.getCellIdentity().getMnc());
 
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                writeIfKnown(out, "rsrp", lteInfo.getCellSignalStrength().getRsrp());
-                                writeIfKnown(out, "rsrq", lteInfo.getCellSignalStrength().getRsrq());
-                            }
+                            writeIfKnown(out, "rsrp", lteInfo.getCellSignalStrength().getRsrp());
+                            writeIfKnown(out, "rsrq", lteInfo.getCellSignalStrength().getRsrq());
 
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                writeIfKnown(out, "rssi", lteInfo.getCellSignalStrength().getRssi());
-                            }
+                            writeIfKnown(out, "rssi", lteInfo.getCellSignalStrength().getRssi());
 
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                writeIfKnown(out, "bands", lteInfo.getCellIdentity().getBands());
-                            }
-                        } else if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) && (cellInfo instanceof CellInfoNr)) {
+                            writeIfKnown(out, "bands", lteInfo.getCellIdentity().getBands());
+                        } else if (cellInfo instanceof CellInfoNr) {
                             CellInfoNr nrInfo = (CellInfoNr) cellInfo;
                             CellIdentityNr nrcellIdent = (CellIdentityNr) nrInfo.getCellIdentity();
                             CellSignalStrength ssInfo = nrInfo.getCellSignalStrength();
@@ -137,9 +129,7 @@ public class TelephonyAPI {
                                 writeIfKnown(out, "ss_rsrq", nrssInfo.getSsRsrq());
                                 writeIfKnown(out, "ss_sinr", nrssInfo.getSsSinr());
                             }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                writeIfKnown(out, "bands", nrcellIdent.getBands());
-                            }
+                            writeIfKnown(out, "bands", nrcellIdent.getBands());
                         } else if (cellInfo instanceof CellInfoCdma) {
                             CellInfoCdma cdmaInfo = (CellInfoCdma) cellInfo;
                             out.name("type").value("cdma");
@@ -196,9 +186,7 @@ public class TelephonyAPI {
                 out.beginObject();
 
                 {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        out.name("data_enabled").value(Boolean.toString(manager.isDataEnabled()));
-                    }
+                    out.name("data_enabled").value(Boolean.toString(manager.isDataEnabled()));
 
                     int dataActivity = manager.getDataActivity();
                     String dataActivityString;
@@ -324,11 +312,10 @@ public class TelephonyAPI {
                         case TelephonyManager.NETWORK_TYPE_UNKNOWN:
                             networkTypeName = "unknown";
                             break;
+                        case TelephonyManager.NETWORK_TYPE_NR:
+                            networkTypeName = "nr";
+                            break;
                         default:
-                            if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) && (networkType == TelephonyManager.NETWORK_TYPE_NR)) {
-                                networkTypeName = "nr";
-                                break;
-                            }
                             networkTypeName = Integer.toString(networkType);
                             break;
                     }
@@ -379,10 +366,7 @@ public class TelephonyAPI {
     @SuppressLint({"MissingPermission", "HardwareIds"})
     private static String readDeviceId(TelephonyManager manager, int phoneType) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                return phoneType == TelephonyManager.PHONE_TYPE_GSM ? manager.getImei() : manager.getMeid();
-            }
-            return manager.getDeviceId();
+            return phoneType == TelephonyManager.PHONE_TYPE_GSM ? manager.getImei() : manager.getMeid();
         } catch (SecurityException | UnsupportedOperationException exception) {
             return null;
         }

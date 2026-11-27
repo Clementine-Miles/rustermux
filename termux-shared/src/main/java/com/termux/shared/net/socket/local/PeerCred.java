@@ -6,7 +6,6 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 
 import com.termux.shared.android.ProcessUtils;
-import com.termux.shared.android.UserUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.markdown.MarkdownUtils;
 
@@ -47,10 +46,10 @@ public class PeerCred {
 
     /** Set {@link #uname} and {@link #gname} if not set. */
     public void fillUnameAndGname(@NonNull Context context) {
-       uname = UserUtils.getNameForUid(context, uid);
+       uname = uid < 0 ? null : context.getPackageManager().getNameForUid(uid);
 
        if (gid != uid)
-           gname = UserUtils.getNameForUid(context, gid);
+           gname = gid < 0 ? null : context.getPackageManager().getNameForUid(gid);
        else
            gname = uname;
     }

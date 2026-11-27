@@ -1,6 +1,5 @@
 package com.termux.shared.file;
 
-import android.os.Build;
 import android.system.Os;
 
 import androidx.annotation.NonNull;
@@ -13,9 +12,6 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.errors.Errno;
 import com.termux.shared.errors.Error;
 import com.termux.shared.errors.FunctionErrno;
-
-import org.apache.commons.io.filefilter.AgeFileFilter;
-import org.apache.commons.io.filefilter.IOFileFilter;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -30,13 +26,20 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Serializable;
 import java.nio.charset.Charset;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 public class FileUtils {
@@ -1064,6 +1067,7 @@ public class FileUtils {
 
             File srcFile = new File(srcFilePath);
             File destFile = new File(destFilePath);
+            if (moveFile) RecursiveFileDelete.checkedPath(srcFile.toPath());
 
             FileType srcFileType = getFileType(srcFilePath, false);
             FileType destFileType = getFileType(destFilePath, false);
@@ -1142,25 +1146,10 @@ public class FileUtils {
                     return error;
 
                 if (srcFileType == FileType.DIRECTORY) {
-                    // Will give runtime exceptions on android < 8 due to missing classes like java.nio.file.Path if org.apache.commons.io version > 2.5
-                    org.apache.commons.io.FileUtils.copyDirectory(srcFile, destFile, true);
-                } else if (srcFileType == FileType.SYMLINK) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        java.nio.file.Files.copy(srcFile.toPath(), destFile.toPath(), LinkOption.NOFOLLOW_LINKS, StandardCopyOption.REPLACE_EXISTING);
-                    } else {
-                        // read the target for the source file and create a symlink at dest
-                        // source file metadata will be lost
-                        error = createSymlinkFile(label + "dest", Os.readlink(srcFilePath), destFilePath);
-                        if (error != null)
-                            return error;
-                    }
+                    copyDirectory(srcFile.getCanonicalFile().toPath(), destFile.getCanonicalFile().toPath());
                 } else {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        java.nio.file.Files.copy(srcFile.toPath(), destFile.toPath(), LinkOption.NOFOLLOW_LINKS, StandardCopyOption.REPLACE_EXISTING);
-                    } else {
-                        // Will give runtime exceptions on android < 8 due to missing classes like java.nio.file.Path if org.apache.commons.io version > 2.5
-                        org.apache.commons.io.FileUtils.copyFile(srcFile, destFile, true);
-                    }
+                    Files.copy(srcFile.toPath(), destFile.toPath(), LinkOption.NOFOLLOW_LINKS,
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
                 }
             }
 
@@ -1179,6 +1168,56 @@ public class FileUtils {
         }
 
         return null;
+    }
+
+    private static void copyDirectory(Path source, Path destination) throws IOException {
+        Files.walkFileTree(source, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) throws IOException {
+                if (directory.equals(destination)) return FileVisitResult.SKIP_SUBTREE;
+                Files.createDirectory(destination.resolve(source.relativize(directory)));
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                Files.copy(file, destination.resolve(source.relativize(file)), LinkOption.NOFOLLOW_LINKS,
+                    StandardCopyOption.COPY_ATTRIBUTES);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException error) throws IOException {
+                if (error != null) throw error;
+                Files.setLastModifiedTime(destination.resolve(source.relativize(directory)),
+                    Files.getLastModifiedTime(directory, LinkOption.NOFOLLOW_LINKS));
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static FileType readDeletionFileType(Path path) throws IOException {
+        try {
+            BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (attributes.isRegularFile()) return FileType.REGULAR;
+            if (attributes.isDirectory()) return FileType.DIRECTORY;
+            if (attributes.isSymbolicLink()) return FileType.SYMLINK;
+            // The Unix attribute view distinguishes local sockets, devices, and FIFOs.
+            try {
+                int mode = (int) Files.getAttribute(path, "unix:mode", LinkOption.NOFOLLOW_LINKS);
+                switch (mode & 0170000) {
+                    case 0140000: return FileType.SOCKET;
+                    case 0060000: return FileType.BLOCK;
+                    case 0020000: return FileType.CHARACTER;
+                    case 0010000: return FileType.FIFO;
+                }
+            } catch (UnsupportedOperationException ignored) {
+                // Providers without Unix special files support the basic attribute view.
+            }
+            return FileType.UNKNOWN;
+        } catch (NoSuchFileException e) {
+            return FileType.NO_EXIST;
+        }
     }
 
 
@@ -1284,8 +1323,8 @@ public class FileUtils {
         if (filePath == null || filePath.isEmpty()) return FunctionErrno.ERRNO_NULL_OR_EMPTY_PARAMETER.getError(label + "file path", "deleteFile");
 
         try {
-            File file = new File(filePath);
-            FileType fileType = getFileType(filePath, false);
+            Path path = RecursiveFileDelete.checkedPath(new File(filePath).toPath());
+            FileType fileType = readDeletionFileType(path);
 
             Logger.logVerbose(LOG_TAG, "Processing delete of " + label + "file at path \"" + filePath + "\" of type \"" + fileType.getName() + "\"");
 
@@ -1315,21 +1354,10 @@ public class FileUtils {
 
             Logger.logVerbose(LOG_TAG, "Deleting " + label + "file at path \"" + filePath + "\"");
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                RecursiveFileDelete.delete(file.toPath(), false);
-            } else {
-                if (fileType == FileType.DIRECTORY) {
-                    // deleteDirectory() instead of forceDelete() gets the files list first instead of walking directory tree, so seems safer
-                    // Will give runtime exceptions on android < 8 due to missing classes like java.nio.file.Path if org.apache.commons.io version > 2.5
-                    org.apache.commons.io.FileUtils.deleteDirectory(file);
-                } else {
-                    // Will give runtime exceptions on android < 8 due to missing classes like java.nio.file.Path if org.apache.commons.io version > 2.5
-                    org.apache.commons.io.FileUtils.forceDelete(file);
-                }
-            }
+            RecursiveFileDelete.delete(path, false, fileType == FileType.DIRECTORY);
 
             // If file still exists after deleting it
-            fileType = getFileType(filePath, false);
+            fileType = readDeletionFileType(path);
             if (fileType != FileType.NO_EXIST)
                 return FileUtilsErrno.ERRNO_FILE_STILL_EXISTS_AFTER_DELETING.getError(label + "file meant to be deleted", filePath);
         }
@@ -1371,34 +1399,19 @@ public class FileUtils {
         label = (label == null || label.isEmpty() ? "" : label + " ");
         if (filePath == null || filePath.isEmpty()) return FunctionErrno.ERRNO_NULL_OR_EMPTY_PARAMETER.getError(label + "file path", "clearDirectory");
 
-        Error error;
-
         try {
             Logger.logVerbose(LOG_TAG, "Clearing " + label + "directory at path \"" + filePath + "\"");
 
-            File file = new File(filePath);
-            FileType fileType = getFileType(filePath, false);
+            Path path = RecursiveFileDelete.checkedPath(new File(filePath).toPath());
+            FileType fileType = readDeletionFileType(path);
 
             // If file exists but not a directory file
             if (fileType != FileType.NO_EXIST && fileType != FileType.DIRECTORY) {
                 return FileUtilsErrno.ERRNO_NON_DIRECTORY_FILE_FOUND.getError(label + "directory", filePath).setLabel(label + "directory");
             }
 
-            // If directory exists, clear its contents
-            if (fileType == FileType.DIRECTORY) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    RecursiveFileDelete.delete(file.toPath(), true);
-                } else {
-                    // Will give runtime exceptions on android < 8 due to missing classes like java.nio.file.Path if org.apache.commons.io version > 2.5
-                    org.apache.commons.io.FileUtils.cleanDirectory(new File(filePath));
-                }
-            }
-            // Else create it
-            else {
-                error = createDirectoryFile(label, filePath);
-                if (error != null)
-                    return error;
-            }
+            if (fileType == FileType.DIRECTORY) RecursiveFileDelete.delete(path, true, true);
+            else Files.createDirectories(path);
         } catch (Exception e) {
             return FileUtilsErrno.ERRNO_CLEARING_DIRECTORY_FAILED_WITH_EXCEPTION.getError(e, label + "directory", filePath, e.getMessage());
         }
@@ -1416,7 +1429,7 @@ public class FileUtils {
      * @param filePath The {@code path} for directory to clear.
      * @param dirFilter  The optional filter to apply when finding subdirectories.
      *                   If this parameter is {@code null}, subdirectories will not be included in the
-     *                   search. Use TrueFileFilter.INSTANCE to match all directories.
+     *                   search. Pass {@code path -> true} to include every subdirectory.
      * @param days The x amount of days before which files should be deleted. This must be `>=0`.
      * @param ignoreNonExistentFile The {@code boolean} that decides if it should be considered an
      *                              error if file to deleted doesn't exist.
@@ -1427,18 +1440,17 @@ public class FileUtils {
      *                             {@link FileTypes#FILE_TYPE_ANY_FLAGS} to allow deletion of any file type.
      * @return Returns the {@code error} if deleting was not successful, otherwise {@code null}.
      */
-    public static Error deleteFilesOlderThanXDays(String label, final String filePath, final IOFileFilter dirFilter, int days, final boolean ignoreNonExistentFile, int allowedFileTypeFlags) {
+    public static Error deleteFilesOlderThanXDays(String label, final String filePath, final Predicate<Path> dirFilter,
+                                                int days, final boolean ignoreNonExistentFile, int allowedFileTypeFlags) {
         label = (label == null || label.isEmpty() ? "" : label + " ");
         if (filePath == null || filePath.isEmpty()) return FunctionErrno.ERRNO_NULL_OR_EMPTY_PARAMETER.getError(label + "file path", "deleteFilesOlderThanXDays");
         if (days < 0) return FunctionErrno.ERRNO_INVALID_PARAMETER.getError(label + "days", "deleteFilesOlderThanXDays", " It must be >= 0.");
 
-        Error error;
-
         try {
             Logger.logVerbose(LOG_TAG, "Deleting files under " + label + "directory at path \"" + filePath + "\" older than " + days + " days");
 
-            File file = new File(filePath);
-            FileType fileType = getFileType(filePath, false);
+            Path root = RecursiveFileDelete.checkedPath(new File(filePath).toPath());
+            FileType fileType = readDeletionFileType(root);
 
             // If file exists but not a directory file
             if (fileType != FileType.NO_EXIST && fileType != FileType.DIRECTORY) {
@@ -1457,28 +1469,40 @@ public class FileUtils {
                 }
             }
 
-            // TODO: Use FileAttributes with support for atime (default), mtime, ctime. Add regex for ignoring file and dir absolute paths.
-            // FIXME: iterateFiles() does not return subdirectories even with TrueFileFilter for file and dir.
-            // FIXME: Empty directories remain
-
-            // If directory exists, delete its contents
             Calendar calendar = Calendar.getInstance();
             calendar.add(Calendar.DATE, -(days));
-            // AgeFileFilter seems to apply to symlink destination timestamp instead of symlink file itself
-            Iterator<File> filesToDelete =
-                org.apache.commons.io.FileUtils.iterateFiles(file, new AgeFileFilter(calendar.getTime()), dirFilter);
-            while (filesToDelete.hasNext()) {
-                File subFile = filesToDelete.next();
-                error = deleteFile(label + " directory sub", subFile.getAbsolutePath(), true, true, allowedFileTypeFlags);
-                if (error != null)
-                    return error;
-            }
+            long cutoff = calendar.getTimeInMillis();
+            String childLabel = label + "directory entry";
+            Error[] failure = new Error[1];
+            Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+                    return directory.equals(root) || (dirFilter != null && dirFilter.test(directory))
+                        ? FileVisitResult.CONTINUE : FileVisitResult.SKIP_SUBTREE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                    if (root.equals(file)) throw new NotDirectoryException(file.toString());
+                    if (attributes.lastModifiedTime().toMillis() > cutoff) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    failure[0] = deleteFile(childLabel, file.toString(), true, true, allowedFileTypeFlags);
+                    return failure[0] == null ? FileVisitResult.CONTINUE : FileVisitResult.TERMINATE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException error) throws IOException {
+                    if (error instanceof NoSuchFileException && (!root.equals(file) || ignoreNonExistentFile)) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    throw error;
+                }
+            });
+            return failure[0];
         } catch (Exception e) {
             return FileUtilsErrno.ERRNO_DELETING_FILES_OLDER_THAN_X_DAYS_FAILED_WITH_EXCEPTION.getError(e, label + "directory", filePath, days, e.getMessage());
         }
-
-        return null;
-
     }
 
 

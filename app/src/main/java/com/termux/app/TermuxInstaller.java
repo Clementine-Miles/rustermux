@@ -6,14 +6,9 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Environment;
-import android.system.ErrnoException;
-import android.system.Os;
-import android.system.OsConstants;
-import android.util.Pair;
 import android.view.WindowManager;
 
 import com.termux.R;
-import com.termux.shared.file.FileUtils;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.file.TermuxFileUtils;
 import com.termux.shared.interact.MessageDialogUtils;
@@ -25,23 +20,21 @@ import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR;
 import static com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH;
 import static com.termux.shared.termux.TermuxConstants.TERMUX_STAGING_PREFIX_DIR;
-import static com.termux.shared.termux.TermuxConstants.TERMUX_STAGING_PREFIX_DIR_PATH;
 
 /** Installs the packaged APT bootstrap using a staging directory. */
 final class TermuxInstaller {
@@ -90,10 +83,17 @@ final class TermuxInstaller {
             return;
         }
 
-        installDefaultMotd(activity);
-
-        if (hasInstalledBootstrap()) {
-            whenDone.run();
+        try {
+            BootstrapInstallation.State state = BootstrapInstallation.inspect(TERMUX_PREFIX_DIR.toPath());
+            if (state == BootstrapInstallation.State.INITIALIZED) {
+                finishBootstrap(activity, whenDone);
+                return;
+            }
+            if (state == BootstrapInstallation.State.DAMAGED) {
+                throw new BootstrapInstallation.DamagedPrefixException(TERMUX_PREFIX_DIR.toPath());
+            }
+        } catch (IOException e) {
+            showBootstrapErrorDialog(activity, whenDone, e);
             return;
         }
 
@@ -102,14 +102,17 @@ final class TermuxInstaller {
         new Thread(() -> {
             try {
                 synchronized (BOOTSTRAP_LOCK) {
-                    if (!hasInstalledBootstrap()) installBootstrap(activity);
+                    if (BootstrapInstallation.inspect(TERMUX_PREFIX_DIR.toPath()) != BootstrapInstallation.State.INITIALIZED) {
+                        Logger.logInfo(LOG_TAG, "Installing " + TermuxConstants.TERMUX_APP_NAME + " bootstrap packages.");
+                        BootstrapInstallation.install(TERMUX_PREFIX_DIR.toPath(), TERMUX_STAGING_PREFIX_DIR.toPath(),
+                            loadZipBytes());
+                        TermuxShellEnvironment.writeEnvironmentToFile(activity);
+                        Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
+                    }
                 }
-                activity.runOnUiThread(() -> {
-                    if (!activity.isDestroyed()) whenDone.run();
-                });
-            } catch (Exception e) {
-                showBootstrapErrorDialog(activity, whenDone,
-                    Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)));
+                activity.runOnUiThread(() -> finishBootstrap(activity, whenDone));
+            } catch (Exception | UnsatisfiedLinkError e) {
+                showBootstrapErrorDialog(activity, whenDone, e);
             } finally {
                 activity.runOnUiThread(() -> {
                     if (!activity.isDestroyed()) progress.dismiss();
@@ -118,105 +121,10 @@ final class TermuxInstaller {
         }, "Termux-bootstrap").start();
     }
 
-    private static boolean hasInstalledBootstrap() {
-        return FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, true)
-            && !TermuxFileUtils.isTermuxPrefixDirectoryEmpty();
-    }
-
-    private static void installBootstrap(Context context) throws IOException, ErrnoException {
-        if (FileUtils.fileExists(TERMUX_PREFIX_DIR_PATH, false)
-                && !FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, false)) {
-            throw new IOException("Existing path blocks bootstrap installation: " + TERMUX_PREFIX_DIR_PATH);
-        }
-
-        Logger.logInfo(LOG_TAG, "Installing " + TermuxConstants.TERMUX_APP_NAME + " bootstrap packages.");
-        requireSuccess(FileUtils.deleteFile("termux prefix staging directory", TERMUX_STAGING_PREFIX_DIR_PATH, true));
-        requireSuccess(TermuxFileUtils.isTermuxPrefixStagingDirectoryAccessible(true, true));
-        extractBootstrap();
-
-        if (hasInstalledBootstrap()) return;
-        if (FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, false)) {
-            removePrefixScaffolding();
-        }
-        Os.rename(TERMUX_STAGING_PREFIX_DIR_PATH, TERMUX_PREFIX_DIR_PATH);
-        TermuxShellEnvironment.writeEnvironmentToFile(context);
-        Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
-    }
-
-    private static void removePrefixScaffolding() throws IOException {
-        File prefix = TERMUX_PREFIX_DIR.getCanonicalFile();
-        for (String path : TermuxConstants.TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY) {
-            File file = new File(prefix, path.substring(TERMUX_PREFIX_DIR_PATH.length() + 1));
-            for (File entry = file; !entry.equals(prefix); entry = entry.getParentFile()) {
-                if (FileUtils.symlinkFileExists(entry.getPath())) {
-                    throw new IOException("Existing link blocks bootstrap installation: " + entry);
-                }
-            }
-            if (FileUtils.fileExists(file.getPath(), false) && !file.delete()) {
-                throw new IOException("Existing data blocks bootstrap installation: " + file);
-            }
-            for (File parent = file.getParentFile(); !parent.equals(prefix); parent = parent.getParentFile()) {
-                // Remove empty parents of scaffold files without removing other content.
-                if (!FileUtils.directoryFileExists(parent.getPath(), false) || !parent.delete()) break;
-            }
-        }
-        if (!prefix.delete()) {
-            throw new IOException("Could not remove empty prefix at " + TERMUX_PREFIX_DIR_PATH);
-        }
-    }
-
-    private static void extractBootstrap() throws IOException, ErrnoException {
-        File staging = TERMUX_STAGING_PREFIX_DIR.getCanonicalFile();
-        byte[] buffer = new byte[8192];
-        List<Pair<String, File>> symlinks = new ArrayList<>();
-        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(loadZipBytes()))) {
-            ZipEntry entry;
-            while ((entry = zipInput.getNextEntry()) != null) {
-                String name = entry.getName();
-                if (name.equals("SYMLINKS.txt")) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(zipInput, StandardCharsets.UTF_8));
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        String[] parts = line.split("←", -1);
-                        if (parts.length != 2 || parts[0].isEmpty()) {
-                            throw new IOException("Malformed bootstrap symlink: " + line);
-                        }
-                        File destination = resolveBootstrapPath(staging, parts[1]);
-                        ensureDirectoryExists(destination.getParentFile());
-                        symlinks.add(Pair.create(parts[0], destination));
-                    }
-                    continue;
-                }
-                File destination = resolveBootstrapPath(staging, name);
-                if (entry.isDirectory()) {
-                    ensureDirectoryExists(destination);
-                    continue;
-                }
-
-                ensureDirectoryExists(destination.getParentFile());
-                try (FileOutputStream output = new FileOutputStream(destination)) {
-                    int count;
-                    while ((count = zipInput.read(buffer)) != -1) output.write(buffer, 0, count);
-                }
-                if (name.startsWith("bin/") || name.startsWith("libexec")
-                        || name.startsWith("lib/apt/apt-helper") || name.startsWith("lib/apt/methods")) {
-                    Os.chmod(destination.getAbsolutePath(), 0700);
-                }
-            }
-        }
-
-        if (symlinks.isEmpty()) throw new IOException("Bootstrap archive has no symlink manifest");
-        for (Pair<String, File> link : symlinks) {
-            Os.symlink(link.first, link.second.getAbsolutePath());
-        }
-    }
-
-    static File resolveBootstrapPath(File staging, String name) throws IOException {
-        File destination = new File(staging, name).getCanonicalFile();
-        if (new File(name).isAbsolute() || !destination.getPath().startsWith(staging.getPath() + File.separator)) {
-            throw new IOException("Bootstrap entry escapes the staging directory: " + name);
-        }
-        return destination;
+    private static void finishBootstrap(Activity activity, Runnable whenDone) {
+        if (activity.isDestroyed()) return;
+        installDefaultMotd(activity);
+        whenDone.run();
     }
 
     /** Set the stock greeting once through the login script's supported customization path. */
@@ -224,48 +132,50 @@ final class TermuxInstaller {
         SharedPreferences defaults = context.getSharedPreferences("termux_shell_defaults", Context.MODE_PRIVATE);
         if (defaults.getBoolean("motd_initialized", false)) return;
 
-        File directory = TermuxConstants.TERMUX_DATA_HOME_DIR;
-        File destination = new File(directory, "motd.sh");
-        File temporary = null;
+        Path directory = TermuxConstants.TERMUX_DATA_HOME_DIR.toPath();
+        Path destination = directory.resolve("motd.sh");
         try {
-            if (!destination.exists()) {
-                if (!directory.mkdirs() && !directory.isDirectory()) {
-                    throw new IOException("Could not create " + directory);
-                }
-                File bundledScript = new File(TermuxConstants.TERMUX_APP.APPS_DIR_PATH, "motd.sh");
-                temporary = File.createTempFile("motd-install", ".tmp", bundledScript.getParentFile());
-                try (InputStream input = context.getAssets().open("shell/motd.sh");
-                     FileOutputStream output = new FileOutputStream(temporary)) {
-                    byte[] buffer = new byte[4096];
-                    int count;
-                    while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
-                }
-                Os.chmod(temporary.getAbsolutePath(), 0700);
-                Os.rename(temporary.getAbsolutePath(), bundledScript.getAbsolutePath());
-                // A concurrent writer or a dangling user symlink still owns the destination.
+            if (!Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
+                Files.createDirectories(directory);
+                Path bundledScript = new File(TermuxConstants.TERMUX_APP.APPS_DIR_PATH, "motd.sh").toPath();
+                Path temporary = Files.createTempFile(bundledScript.getParent(), "motd-install", ".tmp");
                 try {
-                    Os.symlink(bundledScript.getAbsolutePath(), destination.getAbsolutePath());
-                } catch (ErrnoException e) {
-                    if (e.errno != OsConstants.EEXIST) throw e;
+                    try (InputStream input = context.getAssets().open("shell/motd.sh")) {
+                        Files.copy(input, temporary, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rwx------"));
+                    Files.move(temporary, bundledScript, StandardCopyOption.ATOMIC_MOVE);
+                    try {
+                        Files.createSymbolicLink(destination, bundledScript);
+                    } catch (FileAlreadyExistsException ignored) {
+                        // A concurrent writer owns the destination.
+                    }
+                } finally {
+                    Files.deleteIfExists(temporary);
                 }
             }
             defaults.edit().putBoolean("motd_initialized", true).apply();
-        } catch (ErrnoException | IOException e) {
+        } catch (IOException e) {
             Logger.logError(LOG_TAG, "Could not set the default shell greeting: " + e);
-        } finally {
-            if (temporary != null) temporary.delete();
         }
     }
 
-    private static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, String message) {
+    private static void showBootstrapErrorDialog(Activity activity, Runnable whenDone, Throwable error) {
+        String message = Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(error));
+        String reason = error.getLocalizedMessage();
+        String details = error instanceof BootstrapInstallation.DamagedPrefixException
+            ? activity.getString(R.string.bootstrap_prefix_damaged, TERMUX_PREFIX_DIR_PATH)
+            : activity.getString(R.string.bootstrap_error_body) + (reason == null ? "" : "\n\n" + reason);
         Logger.logErrorExtended(LOG_TAG, "Bootstrap Error:\n" + message);
 
         // Send a notification with the exception so that the user knows why bootstrap setup failed
         sendBootstrapCrashReportNotification(activity, message);
 
         activity.runOnUiThread(() -> {
+            if (activity.isFinishing() || activity.isDestroyed()) return;
             try {
-                new AlertDialog.Builder(activity).setTitle(R.string.bootstrap_error_title).setMessage(R.string.bootstrap_error_body)
+                new AlertDialog.Builder(activity).setTitle(R.string.bootstrap_error_title).setMessage(details)
+                    .setCancelable(false)
                     .setNegativeButton(R.string.bootstrap_error_abort, (dialog, which) -> {
                         dialog.dismiss();
                         activity.finish();
@@ -295,103 +205,37 @@ final class TermuxInstaller {
 
         Logger.logInfo(LOG_TAG, "Setting up storage symlinks.");
 
-        new Thread() {
-            public void run() {
-                try {
-                    Error error;
-                    File storageDir = TermuxConstants.TERMUX_STORAGE_HOME_DIR;
-
-                    error = FileUtils.clearDirectory("~/storage", storageDir.getAbsolutePath());
-                    if (error != null) {
-                        Logger.logErrorAndShowToast(context, LOG_TAG, error.getMessage());
-                        Logger.logErrorExtended(LOG_TAG, "Setup Storage Error\n" + error.toString());
-                        TermuxCrashUtils.sendCrashReportNotification(context, LOG_TAG, title, null,
-                            "## " + title + "\n\n" + Error.getErrorMarkdownString(error),
-                            true, true);
-                        return;
-                    }
-
-                    Logger.logInfo(LOG_TAG, "Setting up storage symlinks at ~/storage/shared, ~/storage/downloads, ~/storage/dcim, ~/storage/pictures, ~/storage/music and ~/storage/movies for directories in \"" + Environment.getExternalStorageDirectory().getAbsolutePath() + "\".");
-
-                    // Get primary storage root "/storage/emulated/0" symlink
-                    File sharedDir = Environment.getExternalStorageDirectory();
-                    Os.symlink(sharedDir.getAbsolutePath(), new File(storageDir, "shared").getAbsolutePath());
-
-                    File documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
-                    Os.symlink(documentsDir.getAbsolutePath(), new File(storageDir, "documents").getAbsolutePath());
-
-                    File downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                    Os.symlink(downloadsDir.getAbsolutePath(), new File(storageDir, "downloads").getAbsolutePath());
-
-                    File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
-                    Os.symlink(dcimDir.getAbsolutePath(), new File(storageDir, "dcim").getAbsolutePath());
-
-                    File picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                    Os.symlink(picturesDir.getAbsolutePath(), new File(storageDir, "pictures").getAbsolutePath());
-
-                    File musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
-                    Os.symlink(musicDir.getAbsolutePath(), new File(storageDir, "music").getAbsolutePath());
-
-                    File moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                    Os.symlink(moviesDir.getAbsolutePath(), new File(storageDir, "movies").getAbsolutePath());
-
-                    File podcastsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS);
-                    Os.symlink(podcastsDir.getAbsolutePath(), new File(storageDir, "podcasts").getAbsolutePath());
-
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        File audiobooksDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_AUDIOBOOKS);
-                        Os.symlink(audiobooksDir.getAbsolutePath(), new File(storageDir, "audiobooks").getAbsolutePath());
-                    }
-
-                    // Dir 0 should ideally be for primary storage
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/app/ContextImpl.java;l=818
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/os/Environment.java;l=219
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/core/java/android/os/Environment.java;l=181
-                    // https://cs.android.com/android/platform/superproject/+/android-12.0.0_r32:frameworks/base/services/core/java/com/android/server/StorageManagerService.java;l=3796
-                    // https://cs.android.com/android/platform/superproject/+/android-7.0.0_r36:frameworks/base/services/core/java/com/android/server/MountService.java;l=3053
-
-                    // Create "Android/data/com.termux" symlinks
-                    File[] dirs = context.getExternalFilesDirs(null);
-                    if (dirs != null && dirs.length > 0) {
-                        for (int i = 0; i < dirs.length; i++) {
-                            File dir = dirs[i];
-                            if (dir == null) continue;
-                            String symlinkName = "external-" + i;
-                            Logger.logInfo(LOG_TAG, "Setting up storage symlinks at ~/storage/" + symlinkName + " for \"" + dir.getAbsolutePath() + "\".");
-                            Os.symlink(dir.getAbsolutePath(), new File(storageDir, symlinkName).getAbsolutePath());
-                        }
-                    }
-
-                    // Create "Android/media/com.termux" symlinks
-                    dirs = context.getExternalMediaDirs();
-                    if (dirs != null && dirs.length > 0) {
-                        for (int i = 0; i < dirs.length; i++) {
-                            File dir = dirs[i];
-                            if (dir == null) continue;
-                            String symlinkName = "media-" + i;
-                            Logger.logInfo(LOG_TAG, "Setting up storage symlinks at ~/storage/" + symlinkName + " for \"" + dir.getAbsolutePath() + "\".");
-                            Os.symlink(dir.getAbsolutePath(), new File(storageDir, symlinkName).getAbsolutePath());
-                        }
-                    }
-
-                    Logger.logInfo(LOG_TAG, "Storage symlinks created successfully.");
-                } catch (Exception e) {
-                    Logger.logErrorAndShowToast(context, LOG_TAG, e.getMessage());
-                    Logger.logStackTraceWithMessage(LOG_TAG, "Setup Storage Error: Error setting up link", e);
-                    TermuxCrashUtils.sendCrashReportNotification(context, LOG_TAG, title, null,
-                        "## " + title + "\n\n" + Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)),
-                        true, true);
-                }
+        new Thread(() -> {
+            try {
+                Map<String, Path> links = new LinkedHashMap<>();
+                links.put("shared", Environment.getExternalStorageDirectory().toPath());
+                links.put("documents", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).toPath());
+                links.put("downloads", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).toPath());
+                links.put("dcim", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).toPath());
+                links.put("pictures", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).toPath());
+                links.put("music", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).toPath());
+                links.put("movies", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES).toPath());
+                links.put("podcasts", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS).toPath());
+                links.put("audiobooks", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_AUDIOBOOKS).toPath());
+                addStorageVolumeLinks(links, "external-", context.getExternalFilesDirs(null));
+                addStorageVolumeLinks(links, "media-", context.getExternalMediaDirs());
+                StorageLinks.update(TermuxConstants.TERMUX_STORAGE_HOME_DIR.toPath(), links);
+                Logger.logInfo(LOG_TAG, "Storage symlinks created successfully.");
+            } catch (Exception e) {
+                Logger.logErrorAndShowToast(context, LOG_TAG, e.getMessage());
+                Logger.logStackTraceWithMessage(LOG_TAG, "Setup Storage Error: Error setting up link", e);
+                TermuxCrashUtils.sendCrashReportNotification(context, LOG_TAG, title, null,
+                    "## " + title + "\n\n" + Logger.getStackTracesMarkdownString(null, Logger.getStackTracesStringArray(e)),
+                    true, true);
             }
-        }.start();
+        }, "Termux-storage").start();
     }
 
-    private static void ensureDirectoryExists(File directory) throws IOException {
-        requireSuccess(FileUtils.createDirectoryFile(directory.getAbsolutePath()));
-    }
-
-    private static void requireSuccess(Error error) throws IOException {
-        if (error != null) throw new IOException(Error.getMinimalErrorString(error));
+    private static void addStorageVolumeLinks(Map<String, Path> links, String prefix, File[] directories) {
+        if (directories == null) return;
+        for (int i = 0; i < directories.length; i++) {
+            if (directories[i] != null) links.put(prefix + i, directories[i].toPath());
+        }
     }
 
     private static byte[] loadZipBytes() {

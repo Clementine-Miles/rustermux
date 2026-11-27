@@ -1,17 +1,17 @@
 package com.termux.shared.termux.terminal.io;
 
 import android.content.Context;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.os.VibratorManager;
 
 import com.termux.shared.logger.Logger;
 
 public class BellHandler {
-    private static BellHandler instance = null;
+    private static volatile BellHandler instance = null;
     private static final Object lock = new Object();
 
     private static final String LOG_TAG = "BellHandler";
@@ -20,7 +20,8 @@ public class BellHandler {
         if (instance == null) {
             synchronized (lock) {
                 if (instance == null) {
-                    instance = new BellHandler((Vibrator) context.getApplicationContext().getSystemService(Context.VIBRATOR_SERVICE));
+                    VibratorManager manager = context.getSystemService(VibratorManager.class);
+                    instance = new BellHandler(manager == null ? null : manager.getDefaultVibrator());
                 }
             }
         }
@@ -39,16 +40,10 @@ public class BellHandler {
         bellRunnable = new Runnable() {
             @Override
             public void run() {
-                if (vibrator != null) {
+                if (vibrator != null && vibrator.hasVibrator()) {
                     try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator.vibrate(VibrationEffect.createOneShot(DURATION, VibrationEffect.DEFAULT_AMPLITUDE));
-                        } else {
-                            vibrator.vibrate(DURATION);
-                        }
-                    } catch (Exception e) {
-                        // Issue on samsung devices on android 8
-                        // java.lang.NullPointerException: Attempt to read from field 'android.os.VibrationEffect com.android.server.VibratorService$Vibration.mEffect' on a null object reference
+                        vibrator.vibrate(VibrationEffect.createOneShot(DURATION, VibrationEffect.DEFAULT_AMPLITUDE));
+                    } catch (RuntimeException e) {
                         Logger.logStackTraceWithMessage(LOG_TAG, "Failed to run vibrator", e);
                     }
                 }

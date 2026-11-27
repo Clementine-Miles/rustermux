@@ -16,7 +16,6 @@ import com.termux.shared.shell.am.AmSocketServer;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
-import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.shell.command.environment.TermuxAppShellEnvironment;
 
 /**
@@ -36,10 +35,8 @@ import com.termux.shared.termux.shell.command.environment.TermuxAppShellEnvironm
  * (and "/system/bin/am"), but should be faster since it does not require starting a dalvik vm for
  * every command as done by "am" via termux/TermuxAm.
  *
- * The server is started by termux-app Application class but is not started if
- * {@link TermuxPropertyConstants#KEY_RUN_TERMUX_AM_SOCKET_SERVER} is `false` which can be done by
- * adding the prop with value "false" to the "~/.termux/termux.properties" file. Changes
- * require termux-app to be force stopped and restarted.
+ * The Application starts the server unless `terminal.am-socket` is `false` in ~/.config/rustermux/config.toml.
+ * Restart the app process after changing this setting.
  *
  * The current state of the server can be checked with the
  * {@link TermuxAppShellEnvironment#ENV_TERMUX_APP__AM_SOCKET_SERVER_ENABLED} env variable, which is exported
@@ -115,7 +112,7 @@ public class TermuxAmSocketServer {
     
     /**
      * Update the state of the {@link AmSocketServer} {@link LocalServerSocket} depending on current
-     * value of {@link TermuxPropertyConstants#KEY_RUN_TERMUX_AM_SOCKET_SERVER}.
+     * value of terminal.am-socket.
      */
     public static synchronized void updateState(@NonNull Context context) {
         TermuxAppSharedProperties properties = TermuxAppSharedProperties.getProperties();

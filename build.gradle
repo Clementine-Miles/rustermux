@@ -16,3 +16,14 @@ allprojects {
         mavenCentral()
     }
 }
+
+subprojects { module ->
+    ["com.android.application", "com.android.library"].each { pluginId ->
+        module.pluginManager.withPlugin(pluginId) {
+            def components = module.extensions.getByName("androidComponents")
+            components.beforeVariants(components.selector().withBuildType("debug")) { variant ->
+                variant.enable = false
+            }
+        }
+    }
+}

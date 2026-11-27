@@ -2,11 +2,9 @@ package com.termux.shared.termux.extrakeys;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.util.AttributeSet;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,9 +29,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import android.widget.Button;
-import com.termux.shared.R;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
-import com.termux.shared.theme.ThemeUtils;
 
 /** A grid for terminal keys and locked modifiers absent from most software keyboards. */
 public final class ExtraKeysView extends GridLayout {
@@ -49,7 +45,7 @@ public final class ExtraKeysView extends GridLayout {
          *
          * @param view The view that was clicked.
          * @param buttonInfo The {@link ExtraKeyButton} for the button that was clicked.
-         *                   The button may be a {@link ExtraKeyButton#KEY_MACRO} set which can be
+         *                   The button may be a macro which can be
          *                   checked with a call to {@link ExtraKeyButton#isMacro()}.
          * @param button The {@link Button} that was clicked.
          */
@@ -72,25 +68,10 @@ public final class ExtraKeysView extends GridLayout {
     }
 
 
-    /** Defines the default value for {@link #mButtonTextColor} defined by current theme. */
-    public static final int ATTR_BUTTON_TEXT_COLOR = R.attr.extraKeysButtonTextColor;
-    /** Defines the default value for {@link #mButtonActiveTextColor} defined by current theme. */
-    public static final int ATTR_BUTTON_ACTIVE_TEXT_COLOR = R.attr.extraKeysButtonActiveTextColor;
-    /** Defines the default value for {@link #mButtonBackgroundColor} defined by current theme. */
-    public static final int ATTR_BUTTON_BACKGROUND_COLOR = R.attr.extraKeysButtonBackgroundColor;
-    /** Defines the default value for {@link #mButtonActiveBackgroundColor} defined by current theme. */
-    public static final int ATTR_BUTTON_ACTIVE_BACKGROUND_COLOR = R.attr.extraKeysButtonActiveBackgroundColor;
-
-    /** Defines the default fallback value for {@link #mButtonTextColor} if {@link #ATTR_BUTTON_TEXT_COLOR} is undefined. */
-    public static final int DEFAULT_BUTTON_TEXT_COLOR = 0xFFFFFFFF;
-    /** Defines the default fallback value for {@link #mButtonActiveTextColor} if {@link #ATTR_BUTTON_ACTIVE_TEXT_COLOR} is undefined. */
-    public static final int DEFAULT_BUTTON_ACTIVE_TEXT_COLOR = 0xFF80DEEA;
-    /** Defines the default fallback value for {@link #mButtonBackgroundColor} if {@link #ATTR_BUTTON_BACKGROUND_COLOR} is undefined. */
-    public static final int DEFAULT_BUTTON_BACKGROUND_COLOR = 0x00000000;
-    /** Defines the default fallback value for {@link #mButtonActiveBackgroundColor} if {@link #ATTR_BUTTON_ACTIVE_BACKGROUND_COLOR} is undefined. */
-    public static final int DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR = 0xFF7F7F7F;
-
-
+    private static final int DEFAULT_BUTTON_TEXT_COLOR = 0xffffffff;
+    private static final int DEFAULT_BUTTON_ACTIVE_TEXT_COLOR = 0xff80deea;
+    private static final int DEFAULT_BUTTON_BACKGROUND_COLOR = 0x00000000;
+    private static final int DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR = 0xff7f7f7f;
 
     /** Defines the minimum allowed duration in milliseconds for {@link #mLongPressTimeout}. */
     public static final int MIN_LONG_PRESS_DURATION = 200;
@@ -172,17 +153,14 @@ public final class ExtraKeysView extends GridLayout {
     protected int mLongPressCount;
 
 
-    public ExtraKeysView(Context context, AttributeSet attrs) {
-        super(context, attrs);
+    public ExtraKeysView(Context context) {
+        super(context);
 
         setRepetitiveKeys(ExtraKeysConstants.PRIMARY_REPETITIVE_KEYS);
         setSpecialButtons(getDefaultSpecialButtons(this));
 
-        setButtonColors(
-            ThemeUtils.getSystemAttrColor(context, ATTR_BUTTON_TEXT_COLOR, DEFAULT_BUTTON_TEXT_COLOR),
-            ThemeUtils.getSystemAttrColor(context, ATTR_BUTTON_ACTIVE_TEXT_COLOR, DEFAULT_BUTTON_ACTIVE_TEXT_COLOR),
-            ThemeUtils.getSystemAttrColor(context, ATTR_BUTTON_BACKGROUND_COLOR, DEFAULT_BUTTON_BACKGROUND_COLOR),
-            ThemeUtils.getSystemAttrColor(context, ATTR_BUTTON_ACTIVE_BACKGROUND_COLOR, DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR));
+        setButtonColors(DEFAULT_BUTTON_TEXT_COLOR, DEFAULT_BUTTON_ACTIVE_TEXT_COLOR,
+            DEFAULT_BUTTON_BACKGROUND_COLOR, DEFAULT_BUTTON_ACTIVE_BACKGROUND_COLOR);
 
         setLongPressTimeout(ViewConfiguration.getLongPressTimeout());
         setLongPressRepeatDelay(DEFAULT_LONG_PRESS_REPEAT_DELAY);
@@ -248,46 +226,12 @@ public final class ExtraKeysView extends GridLayout {
 
 
     /** Get {@link #mButtonTextColor}. */
-    public int getButtonTextColor() {
+    int getButtonTextColor() {
         return mButtonTextColor;
     }
 
-    /** Set {@link #mButtonTextColor}. */
-    public void setButtonTextColor(int buttonTextColor) {
-        mButtonTextColor = buttonTextColor;
-    }
-
-
-    /** Get {@link #mButtonActiveTextColor}. */
-    public int getButtonActiveTextColor() {
+    int getButtonActiveTextColor() {
         return mButtonActiveTextColor;
-    }
-
-    /** Set {@link #mButtonActiveTextColor}. */
-    public void setButtonActiveTextColor(int buttonActiveTextColor) {
-        mButtonActiveTextColor = buttonActiveTextColor;
-    }
-
-
-    /** Get {@link #mButtonBackgroundColor}. */
-    public int getButtonBackgroundColor() {
-        return mButtonBackgroundColor;
-    }
-
-    /** Set {@link #mButtonBackgroundColor}. */
-    public void setButtonBackgroundColor(int buttonBackgroundColor) {
-        mButtonBackgroundColor = buttonBackgroundColor;
-    }
-
-
-    /** Get {@link #mButtonActiveBackgroundColor}. */
-    public int getButtonActiveBackgroundColor() {
-        return mButtonActiveBackgroundColor;
-    }
-
-    /** Set {@link #mButtonActiveBackgroundColor}. */
-    public void setButtonActiveBackgroundColor(int buttonActiveBackgroundColor) {
-        mButtonActiveBackgroundColor = buttonActiveBackgroundColor;
     }
 
     /** Set {@link #mButtonTextAllCaps}. */
@@ -462,14 +406,7 @@ public final class ExtraKeysView extends GridLayout {
         if (Settings.System.getInt(getContext().getContentResolver(),
             Settings.System.HAPTIC_FEEDBACK_ENABLED, 0) != 0) {
 
-            if (Build.VERSION.SDK_INT >= 28) {
-                button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            } else {
-                // Perform haptic feedback only if no total silence mode enabled.
-                if (Settings.Global.getInt(getContext().getContentResolver(), "zen_mode", 0) != 2) {
-                    button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                }
-            }
+            button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
         }
     }
 
@@ -618,6 +555,7 @@ public final class ExtraKeysView extends GridLayout {
         if (state == null) return null;
         state.setIsCreated(true);
         Button button = new Button(getContext(), null, android.R.attr.borderlessButtonStyle);
+        button.setSelected(state.isActive);
         button.setTextColor(state.isActive ? mButtonActiveTextColor : mButtonTextColor);
         if (needUpdate) {
             state.buttons.add(button);

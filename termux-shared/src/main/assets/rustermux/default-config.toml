@@ -1,0 +1,96 @@
+# Rustermux configuration. Edit this file, then run termux-reload-settings.
+# Missing keys inherit the bundled defaults. An invalid file keeps the last
+# applied configuration until the error shown in Settings is corrected.
+version = 1
+
+[terminal]
+bell = "vibrate"
+cursor-style = "block"
+cursor-blink-ms = 0
+transcript-rows = 2000 # New sessions only.
+margin-horizontal = 3
+margin-vertical = 0
+working-directory = "~" # New sessions only.
+tmp-cleanup-days = 3 # -1 keeps all files, 0 clears TMPDIR, positive values remove old files on exit.
+open-link-on-tap = false
+am-socket = true # Restart the app process after changing the server setting.
+
+[fonts]
+family = "hack-nerd-font-mono" # Also jetbrains-mono or custom.
+custom-path = "~/.termux/font.ttf" # Used with the custom family.
+size-px = 0 # 0 chooses a size for the display density.
+
+[colors]
+palette = "gruvbox-material-dark-medium"
+# Other presets: gruvbox-dark, gruvbox-light, gruvbox-material-dark-hard,
+# gruvbox-material-dark-soft, gruvbox-material-light-hard,
+# gruvbox-material-light-medium, gruvbox-material-light-soft, or custom.
+# The custom palette uses the values below. Selection applies to every palette.
+background = ""
+foreground = ""
+cursor = ""
+selection = ""
+ansi = {} # Example: { 1 = "#cc241d", 9 = "#fb4934" }
+
+[input]
+soft-keyboard = true
+soft-keyboard-without-hardware = false
+hide-soft-keyboard-on-start = false
+keyboard-toggle = "show/hide"
+back-key = "back"
+volume-keys = "virtual"
+character-based-input = false
+ctrl-space-workaround = false
+
+[extra-keys]
+visible = true
+all-caps = true
+style = "default"
+height-scale = 1.0
+rows = [
+  ["ESC", "/", { key = "-", popup = "|" }, "HOME", "UP", "END", "PGUP"],
+  ["TAB", "CTRL", "ALT", "LEFT", "DOWN", "RIGHT", "PGDN"],
+]
+
+[interface]
+night-mode = "system" # Also true (dark) or false (light), as strings.
+keep-screen-on = false
+keyboard-insets = true
+fullscreen = false
+fullscreen-workaround = false
+# Empty values use the native theme colors.
+background = ""
+foreground = ""
+accent = ""
+
+[sessions]
+show-tab-bar = true
+show-switch-toast = true
+
+[shortcuts]
+# Activate session-control mode before using its commands. Empty disables a
+# shortcut. The activation key needs at least two modifiers.
+toggle-control = "ctrl+alt+shift+space"
+create = "n"
+previous = "left"
+next = "right"
+rename = "r"
+terminate = "x"
+close = "c"
+move-left = "shift+left"
+move-right = "shift+right"
+toggle-tab-bar = "b"
+
+[preferences]
+log-level = 1 # 0 off, 1 normal, 2 debug, 3 verbose.
+key-logging = false
+crash-notifications = true
+disable-file-share-receiver = false
+disable-file-view-receiver = false
+
+[icons]
+# Unicode code points in the bundled Hack Nerd Font Mono.
+keyboard = 0xF030C
+settings = 0xEB51
+new-session = 0xF067
+session-mode = 0xF03A

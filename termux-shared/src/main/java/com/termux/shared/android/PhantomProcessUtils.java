@@ -2,6 +2,7 @@ package com.termux.shared.android;
 
 import android.Manifest;
 import android.content.Context;
+import android.provider.Settings;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -24,15 +25,6 @@ public class PhantomProcessUtils {
     private static final String LOG_TAG = "PhantomProcessUtils";
 
     /**
-     * If feature flag set to false, then will disable trimming of phantom process and processes using
-     * excessive CPU. Flag is available on Pixel Android 12L beta 3 and Android 13. Availability on
-     * other devices will depend on if other vendors merged the 09dcdad5 commit or not in their releases
-     * and if they actually want to support the flag. Check {@link FeatureFlagUtils} javadocs for
-     * more details.
-     */
-    public static final String FEATURE_FLAG_SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS = "settings_enable_monitor_phantom_procs";
-
-    /**
      * Maximum number of allowed phantom processes. It is also used as the label for the currently
      * enforced ActivityManagerConstants MAX_PHANTOM_PROCESSES value in the `dumpsys activity settings`
      * output.
@@ -52,17 +44,6 @@ public class PhantomProcessUtils {
      * https://cs.android.com/android/platform/superproject/+/android-12.0.0_r4:frameworks/base/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java;l=1142
      */
     public static final String SETTINGS_GLOBAL_DEVICE_CONFIG_SYNC_DISABLED = "device_config_sync_disabled";
-
-    /**
-     * Get {@link #FEATURE_FLAG_SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS} feature flag value.
-     *
-     * @param context The {@link Context} for operations.
-     * @return Returns {@link FeatureFlagUtils.FeatureFlagValue}.
-     */
-    @NonNull
-    public static FeatureFlagUtils.FeatureFlagValue getFeatureFlagMonitorPhantomProcsValueString(@NonNull Context context) {
-        return FeatureFlagUtils.getFeatureFlagValueString(context, FEATURE_FLAG_SETTINGS_ENABLE_MONITOR_PHANTOM_PROCS);
-    }
 
     /**
      * Get currently enforced ActivityManagerConstants MAX_PHANTOM_PROCESSES value, defaults to 32.
@@ -108,8 +89,14 @@ public class PhantomProcessUtils {
      */
     @Nullable
     public static Integer getSettingsGlobalDeviceConfigSyncDisabled(@NonNull Context context) {
-        return (Integer) SettingsProviderUtils.getSettingsValue(context, SettingsProviderUtils.SettingNamespace.GLOBAL,
-            SettingsProviderUtils.SettingType.INT, SETTINGS_GLOBAL_DEVICE_CONFIG_SYNC_DISABLED, null);
+        try {
+            return Settings.Global.getInt(context.getContentResolver(), SETTINGS_GLOBAL_DEVICE_CONFIG_SYNC_DISABLED);
+        } catch (Settings.SettingNotFoundException e) {
+            return null;
+        } catch (SecurityException e) {
+            Logger.logVerbose(LOG_TAG, "Device configuration setting unavailable: " + e.getMessage());
+            return null;
+        }
     }
 
 }

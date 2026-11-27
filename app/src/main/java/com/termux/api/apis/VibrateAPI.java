@@ -4,9 +4,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
-import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.os.VibratorManager;
 
 import com.termux.api.TermuxApiReceiver;
 import com.termux.api.util.ResultReturner;
@@ -22,7 +22,8 @@ public class VibrateAPI {
         new Thread() {
             @Override
             public void run() {
-                Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+                VibratorManager manager = context.getSystemService(VibratorManager.class);
+                Vibrator vibrator = manager == null ? null : manager.getDefaultVibrator();
                 int milliseconds = intent.getIntExtra("duration_ms", 1000);
                 boolean force = intent.getBooleanExtra("force", false);
 
@@ -33,20 +34,15 @@ public class VibrateAPI {
                 }
 
                 // Do not vibrate if "Silent" ringer mode or "Do Not Disturb" is enabled and -f/--force option is not used.
-                if (am.getRingerMode() != AudioManager.RINGER_MODE_SILENT || force) {
+                if (vibrator != null && vibrator.hasVibrator()
+                        && (am.getRingerMode() != AudioManager.RINGER_MODE_SILENT || force)) {
                     try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE),
-                                new AudioAttributes.Builder()
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                    .setUsage(AudioAttributes.USAGE_ALARM)
-                                    .build());
-                        } else {
-                            vibrator.vibrate(milliseconds);
-                        }
+                        vibrator.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE),
+                            new AudioAttributes.Builder()
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .setUsage(AudioAttributes.USAGE_ALARM)
+                                .build());
                     } catch (Exception e) {
-                        // Issue on samsung devices on android 8
-                        // java.lang.NullPointerException: Attempt to read from field 'android.os.VibrationEffect com.android.server.VibratorService$Vibration.mEffect' on a null object reference
                         Logger.logStackTraceWithMessage(LOG_TAG, "Failed to run vibrator", e);
                     }
                 }

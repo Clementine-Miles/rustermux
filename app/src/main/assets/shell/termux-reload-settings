@@ -1,7 +1,12 @@
 #!@TERMUX_PREFIX@/bin/sh
 
-if [ "$#" -eq 0 ] && [ "${TERMUX_APP__AM_SOCKET_SERVER_ENABLED:-}" = true ] &&
-    [ -x "@TERMUX_PREFIX@/bin/termux-am" ]; then
+if [ "$#" -ne 0 ]; then
+    printf '%s\n' 'usage: termux-reload-settings' \
+        'Reload ~/.config/rustermux/config.toml without restarting running shells.'
+    exit 0
+fi
+
+if [ "${TERMUX_APP__AM_SOCKET_SERVER_ENABLED:-}" = true ] && [ -x "@TERMUX_PREFIX@/bin/termux-am" ]; then
     exec "@TERMUX_PREFIX@/bin/termux-am" broadcast --user current -a com.termux.app.reload_style com.termux >/dev/null
 fi
-exec "@TERMUX_PREFIX@/bin/termux-reload-settings" "$@"
+exec /system/bin/am broadcast --user current -a com.termux.app.reload_style com.termux >/dev/null

@@ -1,40 +1,20 @@
 package com.termux.terminal;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.os.Build;
-
-import java.util.Properties;
 
 /** A completed Sixel bitmap stored in terminal cells. */
 final class TerminalBitmap {
 
+    /** The dimensions accepted by Android Canvas. */
+    static final int MAX_DIMENSION = 32766;
+    /** The renderer defaults to 100 MiB on API 34 and 150 MiB starting with API 35. */
+    static final int MAX_BITMAP_BYTES =
+        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ? 150 : 100) * 1024 * 1024;
+    private static final int MAX_CELL_DIMENSION = 0x1000;
+
     private static final String LOG_TAG = "TerminalBitmap";
-
-    /** Maximum allocation for a Sixel bitmap, following the Android renderer's limit. */
-    public static final int MAX_BITMAP_SIZE = initMaxBitmapSize();
-    private static int initMaxBitmapSize() {
-        // Synced with `RecordingCanvas.MAX_BITMAP_SIZE`.
-        // - https://cs.android.com/android/platform/superproject/+/android-16.0.0_r1:frameworks/base/graphics/java/android/graphics/RecordingCanvas.java;l=42-50
-        int defaultSize =
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ?
-                    150 * 1024 * 1024 : // 150 MB
-                    100 * 1024 * 1024;  // 100 MB
-
-        Properties systemProperties = AndroidUtils.getSystemProperties(LOG_TAG);
-        String maxTextureSizeString = systemProperties.getProperty("ro.hwui.max_texture_allocation_size");
-
-        if (maxTextureSizeString == null) return defaultSize;
-
-        try {
-            int maxTextureSize = Integer.parseInt(maxTextureSizeString);
-            return maxTextureSize > 0 ? maxTextureSize : defaultSize;
-        }
-        catch (Exception e) {
-            return defaultSize;
-        }
-    }
-
-
 
     final Bitmap mBitmap;
     final int mCellWidth;
@@ -48,101 +28,59 @@ final class TerminalBitmap {
         mScrollLines = scrollLines;
     }
 
-    /** Build a {@link TerminalBitmap} from a {@link TerminalSixel}. */
-    static TerminalBitmap build(TerminalBuffer terminalBuffer, int bitmapNum, TerminalSixel terminalSixel,
-                                       int x, int y, int cellWidth, int cellHeight) {
-        try {
-            Bitmap bitmap = terminalSixel.getBitmap();
-            bitmap = resizeBitmapConstrained(LOG_TAG, "sixel", terminalBuffer.getClient(), bitmap,
-                terminalSixel.getWidth(), terminalSixel.getHeight(), cellWidth, cellHeight,
-                terminalBuffer.mColumns - x);
-            if (bitmap == null) {
-                Logger.logError(terminalBuffer.getClient(), LOG_TAG,
-                    "Create terminal bitmap " + bitmapNum + " from terminal sixel failed");
-                return null;
-            }
-
-            return buildOrThrow(terminalBuffer, bitmapNum, bitmap,
-                x, y, cellWidth, cellHeight);
-        } catch (Throwable t) {
-            if (t instanceof OutOfMemoryError) System.gc();
-            Logger.logError(terminalBuffer.getClient(), LOG_TAG,
-                "Create terminal bitmap " + bitmapNum + " from terminal sixel failed: " + t.getMessage());
+    static TerminalBitmap build(TerminalBuffer terminalBuffer, int bitmapNum, TerminalSixel sixel,
+                                int column, int row, int cellWidth, int cellHeight, int availableBytes) {
+        Bitmap bitmap = sixel.getBitmap();
+        if (bitmap == null || sixel.getWidth() == 0 || sixel.getHeight() == 0 ||
+            cellWidth <= 0 || cellHeight <= 0) {
             return null;
         }
-    }
 
+        int columns = Math.min(terminalBuffer.mColumns - column, (sixel.getWidth() - 1) / cellWidth + 1);
+        int rows = (sixel.getHeight() - 1) / cellHeight + 1;
+        if (columns <= 0 || columns > MAX_CELL_DIMENSION || rows > MAX_CELL_DIMENSION ||
+            (long) columns * cellWidth > MAX_DIMENSION || (long) rows * cellHeight > MAX_DIMENSION) {
+            return null;
+        }
 
-    private static TerminalBitmap buildOrThrow(TerminalBuffer terminalBuffer, int bitmapNum, Bitmap bitmap,
-                                               int x, int y, int cellWidth, int cellHeight) {
-        int bitmapWidth = bitmap.getWidth();
-        int bitmapHeight = bitmap.getHeight();
-        int width = Math.min(terminalBuffer.mColumns - x, (bitmapWidth + cellWidth - 1) / cellWidth);
-        int height = (bitmapHeight + cellHeight - 1) / cellHeight;
-        int s = 0;
+        int bitmapWidth = columns * cellWidth;
+        int bitmapHeight = rows * cellHeight;
+        if ((long) bitmapWidth * bitmapHeight > availableBytes / 4) return null;
+        if (bitmap.getWidth() != bitmapWidth || bitmap.getHeight() != bitmapHeight) {
+            bitmap = resize(terminalBuffer.getClient(), bitmap, bitmapWidth, bitmapHeight);
+            if (bitmap == null) return null;
+        }
 
-        for (int i = 0; i < height; i++) {
-            if (y + i - s == terminalBuffer.mScreenRows) {
+        int scrollLines = 0;
+        for (int y = 0; y < rows; y++) {
+            if (row + y - scrollLines == terminalBuffer.mScreenRows) {
                 terminalBuffer.scrollDownOneLine(0, terminalBuffer.mScreenRows, TextStyle.NORMAL);
-                s++;
+                scrollLines++;
             }
-            for (int j = 0; j < width ; j++) {
-                terminalBuffer.setChar(x + j, y + i - s, '+', TextStyle.encodeTerminalBitmap(bitmapNum, j, i));
+            for (int x = 0; x < columns; x++) {
+                terminalBuffer.setChar(column + x, row + y - scrollLines, '+', TextStyle.encodeTerminalBitmap(bitmapNum, x, y));
             }
         }
 
-        if (width * cellWidth < bitmapWidth) {
-            bitmap = Bitmap.createBitmap(bitmap, 0, 0, width * cellWidth, bitmapHeight);
-        }
-
-        return new TerminalBitmap(bitmap, cellWidth, cellHeight, height - s);
+        return new TerminalBitmap(bitmap, cellWidth, cellHeight, rows - scrollLines);
     }
 
-    static Bitmap resizeBitmap(String logTag, String label, TerminalSessionClient client, Bitmap bitmap,
-                                      int bitmapWidth, int bitmapHeight) {
-        
-        Bitmap newBitmap;
+    static boolean canAllocate(int width, int height) {
+        return width > 0 && height > 0 && width <= MAX_DIMENSION && height <= MAX_DIMENSION &&
+            (long) width * height <= MAX_BITMAP_BYTES / 4;
+    }
+
+    static Bitmap resize(TerminalSessionClient client, Bitmap bitmap, int width, int height) {
+        if (!canAllocate(width, height)) return null;
         try {
-            int newBitmapSize = bitmapWidth * bitmapHeight * 4;
-            if (newBitmapSize < 0 || newBitmapSize > MAX_BITMAP_SIZE) {
-                Logger.logError(client, logTag, "The new " + label + " bitmap after resize with" +
-                    " width " + bitmapWidth + " and height " + bitmapHeight +
-                    " has size " + newBitmapSize + " greater than max bitmap size " + MAX_BITMAP_SIZE);
-                return null;
+            Bitmap resized = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            if (bitmap != null && resized != null) {
+                new Canvas(resized).drawBitmap(bitmap, 0, 0, null);
             }
-
-            int[] pixels = new int[bitmap.getAllocationByteCount()];
-            bitmap.getPixels(pixels, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
-
-            newBitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888);
-
-            int newWidth = Math.min(bitmap.getWidth(), bitmapWidth);
-            int newHeight = Math.min(bitmap.getHeight(), bitmapHeight);
-            newBitmap.setPixels(pixels, 0, bitmap.getWidth(), 0, 0, newWidth, newHeight);
-            return newBitmap;
-        } catch (Throwable t) {
-            if (t instanceof OutOfMemoryError) System.gc();
-            Logger.logError(client, logTag, "Resize " + label + " bitmap to" +
-                " width " + bitmapWidth + " and height " + bitmapHeight + " failed: " + t.getMessage());
+            return resized;
+        } catch (OutOfMemoryError | IllegalArgumentException e) {
+            Logger.logError(client, LOG_TAG, "Sixel bitmap allocation failed for " + width + "×" + height);
             return null;
         }
     }
-
-    private static Bitmap resizeBitmapConstrained(String logTag, String label, TerminalSessionClient client, Bitmap bitmap,
-                                                 int bitmapWidth, int bitmapHeight,
-                                                 int cellWidth, int cellHeight, int columns) {
-        // Width and height must be multiples of the cell width and height.
-        // Bitmap should not extend beyond screen width.
-        Bitmap originalBitmap = bitmap;
-        if (bitmapWidth > cellWidth * columns || (bitmapWidth % cellWidth) != 0 || (bitmapHeight % cellHeight) != 0) {
-            int newBitmapWidth = Math.min(cellWidth * columns, ((bitmapWidth - 1) / cellWidth) * cellWidth + cellWidth);
-            int newBitmapHeight = ((bitmapHeight - 1) / cellHeight) * cellHeight + cellHeight;
-            bitmap = resizeBitmap(logTag, label, client, originalBitmap, newBitmapWidth, newBitmapHeight);
-            // Only a minor display glitch if resize failed.
-            return bitmap != null ? bitmap : originalBitmap;
-        } else {
-            return originalBitmap;
-        }
-    }
-
 }

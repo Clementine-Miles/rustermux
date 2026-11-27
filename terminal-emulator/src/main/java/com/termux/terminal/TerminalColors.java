@@ -2,6 +2,8 @@ package com.termux.terminal;
 
 import android.graphics.Color;
 
+import java.util.Arrays;
+
 /** Current terminal colors (if different from default). */
 public final class TerminalColors {
 
@@ -13,6 +15,7 @@ public final class TerminalColors {
      * 4 control sequence.
      */
     public final int[] mCurrentColors = new int[TextStyle.NUM_INDEXED_COLORS];
+    private final boolean[] sessionOverrides = new boolean[TextStyle.NUM_INDEXED_COLORS];
 
     /** Create a new instance with default colors from the theme. */
     public TerminalColors() {
@@ -21,12 +24,21 @@ public final class TerminalColors {
 
     /** Reset a particular indexed color with the default color from the color theme. */
     public void reset(int index) {
+        sessionOverrides[index] = false;
         mCurrentColors[index] = COLOR_SCHEME.mDefaultColors[index];
     }
 
     /** Reset all indexed colors with the default color from the color theme. */
     public void reset() {
+        Arrays.fill(sessionOverrides, false);
         System.arraycopy(COLOR_SCHEME.mDefaultColors, 0, mCurrentColors, 0, TextStyle.NUM_INDEXED_COLORS);
+    }
+
+    /** Apply newly selected defaults without erasing colors assigned by the foreground process. */
+    public void refreshDefaults() {
+        for (int index = 0; index < mCurrentColors.length; index++) {
+            if (!sessionOverrides[index]) mCurrentColors[index] = COLOR_SCHEME.mDefaultColors[index];
+        }
     }
 
     /**
@@ -34,7 +46,7 @@ public final class TerminalColors {
      * <p/>
      * Highest bit is set if successful, so return value is 0xFF${R}${G}${B}. Return 0 if failed.
      */
-    static int parse(String c) {
+    public static int parse(String c) {
         try {
             int skipInitial, skipBetween;
             if (c.charAt(0) == '#') {
@@ -51,6 +63,7 @@ public final class TerminalColors {
             int charsForColors = c.length() - skipInitial - 2 * skipBetween;
             if (charsForColors % 3 != 0) return 0; // Unequal lengths.
             int componentLength = charsForColors / 3;
+            if (componentLength < 1 || componentLength > 4) return 0;
             double mult = 255 / (Math.pow(2, componentLength * 4) - 1);
 
             int currentPosition = skipInitial;
@@ -72,7 +85,10 @@ public final class TerminalColors {
     /** Try parse a color from a text parameter and into a specified index. */
     public void tryParseColor(int intoIndex, String textParameter) {
         int c = parse(textParameter);
-        if (c != 0) mCurrentColors[intoIndex] = c;
+        if (c != 0) {
+            sessionOverrides[intoIndex] = true;
+            mCurrentColors[intoIndex] = c;
+        }
     }
 
     /**

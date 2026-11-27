@@ -1,16 +1,18 @@
 package com.termux.app.api.file;
 
-import com.termux.app.api.file.FileReceiverActivity;
+import android.app.Application;
 
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class, sdk = 34)
 public class FileReceiverActivityTest {
 
     @Test

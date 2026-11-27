@@ -218,7 +218,7 @@ public class AmSocketServer {
 
             if (checkDisplayOverAppsPermission && amCommandArray.length >= 1 &&
                 (amCommandArray[0].equals("start") || amCommandArray[0].equals("startservice")) &&
-                !PermissionUtils.validateDisplayOverOtherAppsPermissionForPostAndroid10(context, true)) {
+                !PermissionUtils.validateDisplayOverOtherAppsPermission(context, true)) {
                 throw new IllegalStateException(context.getString(R.string.error_display_over_other_apps_permission_not_granted,
                     PackageUtils.getAppNameForPackage(context)));
             }

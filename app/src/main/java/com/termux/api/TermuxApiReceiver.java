@@ -6,7 +6,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Process;
 import android.provider.Settings;
 
@@ -58,10 +57,8 @@ public class TermuxApiReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         // This receiver is private. An identified sender must also have the app UID.
-        if (Build.VERSION.SDK_INT >= 34) {
-            int senderUid = getSentFromUid();
-            if (senderUid >= 0 && senderUid != Process.myUid()) return;
-        }
+        int senderUid = getSentFromUid();
+        if (senderUid >= 0 && senderUid != Process.myUid()) return;
         boolean notificationReply = NotificationAPI.ACTION_NOTIFICATION_REPLY.equals(intent.getAction());
         try {
             if (notificationReply) {

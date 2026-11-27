@@ -1,7 +1,5 @@
 package com.termux.terminal;
 
-import android.util.Base64;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -139,11 +137,6 @@ public class OperatingSystemControlTest extends TerminalTestCase {
 		assertIndexColorsMatch(TerminalColors.COLOR_SCHEME.mDefaultColors);
 	}
 
-	public void disabledTestSetClipboard() {
-		// Cannot run this as a unit test since Base64 is a android.util class.
-		enterString("\033]52;c;" + Base64.encodeToString("Hello, world".getBytes(), 0) + "\007");
-	}
-
 	public void testResettingTerminalResetsColor() throws Exception {
 		// "OSC 4; $INDEX; $COLORSPEC BEL" => Change color $INDEX to the color specified by $COLORSPEC.
 		withTerminalSized(4, 4).enterString("\033]4;5;#00FF00\007");
@@ -259,6 +252,31 @@ public class OperatingSystemControlTest extends TerminalTestCase {
 		}
 		assertEquals("Café", mTerminal.getTitle());
 		assertLinesAre("X       ", "        ");
+	}
+
+	public void testRepeatedEscapeCancelsSupportedOscAndStartsNextEscape() {
+		withTerminalSized(8, 2).enterString("\033]2;old\007A\033]2;discarded\033");
+		enterString("\033");
+		enterString("P+q436f\033\\B").assertLinesAre("AB      ", "        ");
+		assertEquals("old", mTerminal.getTitle());
+		assertEquals("\033P1+r436f=323536\033\\", mOutput.getOutputAndClear());
+	}
+
+	public void testResetClearsPendingOscAndUtf8() {
+		withTerminalSized(8, 2).enterString("A\033]2;fragment");
+		byte[] partial = {(byte) 0xc3};
+		mTerminal.append(partial, partial.length);
+		mTerminal.reset();
+		enterString("B\033]2;new\007C").assertLinesAre("ABC     ", "        ");
+		assertEquals("new", mTerminal.getTitle());
+	}
+
+	public void testMalformedColorIndexesDoNotWrapOrCrash() {
+		withTerminalSized(8, 2).enterString("\033]4;4;#112233\007A");
+		enterString("\033]4;4294967300;#445566\007").assertColor(4, 0xff112233);
+		enterString("\033]104;-1;4294967300;256;not-a-number\007B").assertColor(4, 0xff112233);
+		enterString("\033]104;invalid;4;\007C").assertColor(4, TerminalColors.COLOR_SCHEME.mDefaultColors[4]);
+		assertLinesAre("ABC     ", "        ");
 	}
 
 }

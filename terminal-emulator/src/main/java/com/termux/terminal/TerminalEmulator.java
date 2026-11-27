@@ -72,31 +72,9 @@ public final class TerminalEmulator {
     private static final int ESC_PERCENT = 9;
     /** Parse an OSC command number after ESC ]. */
     private static final int ESC_OSC = 10;
-    /** Parse the string terminator or the next escape after an ESC inside an OSC. */
-    private static final int ESC_OSC__ESC = 11;
     /** Escape processing: ESC [ > */
     private static final int ESC_CSI_BIGGERTHAN = 12;
-    /**
-     * Escape procession: `ESC P` for Device Control String (DCS)
-     * <p>
-     * `DCS` commands are in the format `DCS data ST` where `ST` is the string terminator passed as `ESC \`.
-     * `data` is application defined raw data without any specific standards.
-     * <p>
-     * If an `DCS` escape sequence is received, then {@link #mEscapeState} is set to {@link #ESC_DCS}
-     * and {@link #doDcs(int)} is called by {@link #processCodePoint(int)}.
-     * - By default it will add bytes received after `DCS` escape sequence to {@link #mTerminalControlArgs}.
-     * - If an `ESC` is received by {@link #processCodePoint(int)}, then {@link #ESC_DCS__ESC} set
-     *   to `true`.
-     * - If the next code point is a `\` for `ST`, then {@link #doDcs(int)} processes the DCS command.
-     * - If the next code point is not a `\`, then {@link #ESC_DCS__ESC} is set back to `false` as
-     *   `ESC` may be part of command data as so it is added to {@link #mTerminalControlArgs}.
-     *  - For certain commands like sixel commands, {@link #doDcs(int)} alters the default behaviour.
-     * <p>
-     * See also {@link #mIsFastPathDcs} for enabling fast path for specific `DCS` commands if required.
-     * <p>
-     * <p>
-     * - https://vt100.net/docs/vt220-rm/chapter2.html#S2.5.3
-     */
+    /** Device Control String, introduced by ESC P. */
     private static final int ESC_DCS = 13;
     /** Escape processing: CSI > */
     private static final int ESC_CSI_QUESTIONMARK_ARG_DOLLAR = 14;
@@ -110,30 +88,8 @@ public final class TerminalEmulator {
     private static final int ESC_CSI_SINGLE_QUOTE = 18;
     /** Escape processing: CSI ! */
     private static final int ESC_CSI_EXCLAMATION = 19;
-    /**
-     * Escape processing: `ESC _` for Application Program Command (APC).
-     * <p>
-     * `APC` commands are in the format `APC data ST` where `ST` is the string terminator passed as `ESC \`.
-     * `data` is application defined raw data without any specific standards.
-     * <p>
-     * If an `APC` escape sequence is received, then {@link #mEscapeState} is set to {@link #ESC_APC}
-     * and {@link #receiveApc(int)} is called by {@link #processCodePoint(int)}.
-     * - By default it will add bytes received after `APC` escape sequence to {@link #mTerminalControlArgs}.
-     * - If an `ESC` is received, then {@link #mEscapeState} is set to {@link #ESC_APC__ESC} and
-     *   {@link #receiveApcEsc(int)} is called for the next code point.
-     *   - If the next code point is a `\` for `ST`, then {@link #doApc()} is called to
-     *     process the APC command.
-     *   - If the next code point is not a `\`, then {@link #mEscapeState} is set back to
-     *     {@link #ESC_APC} as `ESC` may be part of command data as so it is added to
-     *     {@link #mTerminalControlArgs}, and for later code points {@link #receiveApc(int)} is called
-     *     instead.
-     * <p>
-     * Currently, APC commands are only parsed, but ignored as none are supported.
-     * <p>
-     * - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Application-Program-Command-functions
-     */
+    /** Unsupported Application Program Command, consumed through ESC backslash. */
     private static final int ESC_APC = 20;
-    /** Escape processing: `ESC` received while receiving a {@link #ESC_APC} command.  */
     private static final int ESC_APC__ESC = 21;
     /** Escape processing: ESC [ <parameter bytes> */
     private static final int ESC_CSI_UNSUPPORTED_PARAMETER_BYTE = 22;
@@ -229,7 +185,7 @@ public final class TerminalEmulator {
     /** The terminal session this emulator is bound to. */
     private final TerminalOutput mSession;
 
-    TerminalSessionClient mClient;
+    private final TerminalSessionClient mClient;
 
     /** Keeps track of the current argument of the current escape sequence. Ranges from 0 to MAX_ESCAPE_PARAMETERS-1. */
     private int mArgIndex;
@@ -240,59 +196,18 @@ public final class TerminalEmulator {
 
 
 
-    /**
-     * The initial capacity for {@link #mTerminalControlArgs}.
-     */
-    private static final int TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY = 16;
-
-    /**
-     * The default max length for {@link #mTerminalControlArgs}.
-     * Also bounds the shared buffer while Sixel commands are processed in chunks.
-     */
-    private static final int TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH = 16384;
-
-    /** The terminal control arguments string buffer, like for OSC, DCS, APC commands. */
-    private StringBuilder mTerminalControlArgs = new StringBuilder(TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY);
-
-
-
+    private static final int CONTROL_ARGS_INITIAL_CAPACITY = 16;
+    private static final int CONTROL_ARGS_LIMIT = 16 * 1024;
     private static final int OSC_CLIPBOARD_MAX_LENGTH = 100 * 1024;
+    // Three decimal int-valued parameters, plus an optional trailing delimiter.
+    private static final int DCS_HEADER_LIMIT = 33;
+
+    private enum DcsType { HEADER, SETTING, TERMINFO, SIXEL, DISCARD }
+
+    private StringBuilder mTerminalControlArgs = new StringBuilder(CONTROL_ARGS_INITIAL_CAPACITY);
     private int mOscCommand = -1;
-
-    /**
-     * If `true`, then `processCodePoint()` will directly call `doDcs()` as a fast path
-     * without additional checks.
-     *
-     * Can be enabled for DCS commands via {@link #doDcs(int)}.
-     */
-    private boolean mIsFastPathDcs = false;
-
-    /** Whether processing an `ESC` for a DCS command. */
-    private boolean ESC_DCS__ESC = false;
-
-
-    /** Whether processing a sixel `DCS q s..s ST` or `DCS P1; P2; P3; q s..s ST` command to create a {@link TerminalSixel}. */
-    private boolean ESC_DCS__SIXEL = false;
-
-    /** Whether to check if sixel command is being received when processing a DCS command. */
-    private boolean ESC_DCS__CHECK_IF_SIXEL = true;
-
-    /** The command part number in case a long sixel command was broken into parts for processing. */
-    private int mSixelCommandPartNum;
-
-    /**
-     * The capacity to set for {@link #mTerminalControlArgs} used to store sixel commands before processing.
-     *
-     * See also {@link #ensureTerminalControlArgsCapacity(int)}.
-     */
-    private Integer mSixelArgsCapacity;
-
-    /**
-     * The initial capacity for sixel args stored in {@link #mTerminalControlArgs}.
-     */
-    private static final int SIXEL_ARGS__INITIAL_CAPACITY = 256;
-
-
+    private DcsType mDcsType = DcsType.HEADER;
+    private boolean mStringEscapePending;
 
     /**
      * True if the current escape sequence should continue, false if the current escape sequence should be terminated.
@@ -446,14 +361,6 @@ public final class TerminalEmulator {
         mTabStop = new boolean[mColumns];
         reset();
     }
-
-    public void updateTerminalSessionClient(TerminalSessionClient client) {
-        mClient = client;
-        setCursorStyle();
-        setCursorBlinkState(true);
-    }
-
-
 
     public TerminalBuffer getScreen() {
         return mScreen;
@@ -611,8 +518,18 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
+        mScreen.doTerminalBitmapsGC(300000);
         for (int i = 0; i < length; i++)
             processByte(buffer[i]);
+    }
+
+    /** Discard unfinished protocol state before writing the local process exit message. */
+    void finishInput() {
+        if (mUtf8ToFollow != 0 && mEscapeState == ESC_NONE) emitCodePoint(UNICODE_REPLACEMENT_CHAR);
+        mUtf8Index = mUtf8ToFollow = 0;
+        clearControlStringState();
+        mScreen.sixelClear();
+        finishSequence();
     }
 
     private void processByte(byte byteToProcess) {
@@ -681,39 +598,21 @@ public final class TerminalEmulator {
     }
 
     public void processCodePoint(int b) {
-        mScreen.doTerminalBitmapsGC(300000);
-
         switch (mEscapeState) {
             case ESC_OSC:
             case ESC_OSC_PARAMETER:
             case ESC_OSC_DISCARD:
-            case ESC_OSC__ESC:
-                receiveOsc(b);
+                if (!receiveControlStringDelimiter(b)) receiveOsc(b);
                 return;
-        }
-
-        if (mEscapeState == ESC_DCS && mIsFastPathDcs) {
-            if (b == 27) { // ESC
-                ESC_DCS__ESC = true;
+            case ESC_DCS:
+                if (!receiveControlStringDelimiter(b)) receiveDcs(b);
                 return;
-            }
-            mContinueSequence = false;
-            doDcs(b);
-            if (!mContinueSequence) mEscapeState = ESC_NONE;
-            return;
-        }
-
-        // The Application Program-Control (APC) string might be arbitrary non-printable characters, so handle that early.
-        if (mEscapeState == ESC_APC) {
-            mContinueSequence = false;
-            receiveApc(b);
-            if (!mContinueSequence) mEscapeState = ESC_NONE;
-            return;
-        } else if (mEscapeState == ESC_APC__ESC) {
-            mContinueSequence = false;
-            receiveApcEsc(b);
-            if (!mContinueSequence) mEscapeState = ESC_NONE;
-            return;
+            case ESC_APC:
+                if (b == 27) mEscapeState = ESC_APC__ESC;
+                return;
+            case ESC_APC__ESC:
+                mEscapeState = b == '\\' ? ESC_NONE : ESC_APC;
+                return;
         }
 
         switch (b) {
@@ -747,10 +646,10 @@ public final class TerminalEmulator {
             case 10: // Line feed (LF, \n).
             case 11: // Vertical tab (VT, \v).
             case 12: // Form feed (FF, \f).
-                if (mEscapeState != ESC_DCS) doLinefeed();
+                doLinefeed();
                 break;
             case 13: // Carriage return (CR, \r).
-                if (mEscapeState != ESC_DCS) setCursorCol(mLeftMargin);
+                setCursorCol(mLeftMargin);
                 break;
             case 14: // Shift Out (Ctrl-N, SO) → Switch to Alternate Character Set. This invokes the G1 character set.
                 mUseLineDrawingUsesG0 = false;
@@ -767,12 +666,6 @@ public final class TerminalEmulator {
                 }
                 break;
             case 27: // ESC
-                // Starts an escape sequence unless we're parsing a string
-                if (mEscapeState == ESC_DCS) {
-                    // XXX: Ignore escape when reading device control sequence, since it may be part of string terminator.
-                    ESC_DCS__ESC = true;
-                    return;
-                }
                 startEscapeSequence();
                 break;
             default:
@@ -971,9 +864,6 @@ public final class TerminalEmulator {
                         break;
                     case ESC_PERCENT:
                         break;
-                    case ESC_DCS:
-                        doDcs(b);
-                        break;
                     case ESC_CSI_QUESTIONMARK_ARG_DOLLAR:
                         if (b == 'p') {
                             // Request DEC private mode (DECRQM).
@@ -1044,530 +934,183 @@ public final class TerminalEmulator {
 
 
 
-    /**
-     * Do {@link #ESC_DCS}. Check its docs for more info.
-     */
-    private void doDcs(final int b) {
-        if (
-            // End of DCS if string terminator ST `ESC \` received.
-            (ESC_DCS__ESC && b == '\\') ||
-            // If sixel continuation after sixel start and a
-            // Color Introducer `#`, Graphics Repeat Introducer `!` or Raster Attributes `"`
-            // command is received, then process any previous commands, or if end of input
-            // with a ST received.
-            // If `b` is a Color Introducer `#`, Graphics Repeat Introducer `!` or Raster Attributes `"`
-            // command, then it is added to buffer in code below and more input is waited for as
-            // further arguments need to be received for its command before it can be processed,
-            // which is not until the next command is received.
-            // We wait till at least `TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2` commands string has
-            // been received. The divide by 2 is done since if near the max length, a new command
-            // starts and it does not end before the max length, then `Terminal control args overflow
-            // error would occur.
-            // If the first command has been fully received, then we run it immediately in case
-            // it is the Raster Attributes command containing the "rough" horizontal and vertical
-            // size of image, which is used to set the capacity of the `mTerminalControlArgs` buffer
-            // and also resize the bitmap, so that memory allocations are avoided if possible.
-            // `mTerminalControlArgs.length() > 1` is done so that loop does not engage on first
-            // character after `q` and only after first command has been fully received.
-            (ESC_DCS__SIXEL && ((b == '#' || b == '!' || b == '"') &&
-                ((mTerminalControlArgs.length() >= (TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2)) || (mTerminalControlArgs.length() > 1 && mSixelCommandPartNum == 1))))
-        ) {
-                String dcs = mTerminalControlArgs.toString();
-
-                // Request Selection or Setting (DECRQSS) `DCS $ q P t ST`.
-                // - https://vt100.net/docs/vt510-rm/DECRQSS.html
-                if (dcs.startsWith("$q")) {
-                    if (dcs.equals("$q\"p")) {
-                        // DECSCL, conformance level, http://www.vt100.net/docs/vt510-rm/DECSCL:
-                        String csiString = "64;1\"p";
-                        mSession.write("\033P1$r" + csiString + "\033\\");
-                    } else {
-                        finishSequenceAndLogError("Unrecognized DECRQSS string: '" + dcs + "'");
-                    }
-                } else if (dcs.startsWith("+q")) {
-                    // Request Termcap/Terminfo String. The string following the "q" is a list of names encoded in
-                    // hexadecimal (2 digits per character) separated by ; which correspond to termcap or terminfo key
-                    // names.
-                    // Two special features are also recognized, which are not key names: Co for termcap colors (or colors
-                    // for terminfo colors), and TN for termcap name (or name for terminfo name).
-                    // xterm responds with DCS 1 + r P t ST for valid requests, adding to P t an = , and the value of the
-                    // corresponding string that xterm would send, or DCS 0 + r P t ST for invalid requests. The strings are
-                    // encoded in hexadecimal (2 digits per character).
-                    // Example:
-                    // :kr=\EOC: ks=\E[?1h\E=: ku=\EOA: le=^H:mb=\E[5m:md=\E[1m:\
-                    // where
-                    // kd=down-arrow key
-                    // kl=left-arrow key
-                    // kr=right-arrow key
-                    // ku=up-arrow key
-                    // #2=key_shome, "shifted home"
-                    // #4=key_sleft, "shift arrow left"
-                    // %i=key_sright, "shift arrow right"
-                    // *7=key_send, "shifted end"
-                    // k1=F1 function key
-
-                    // Example: Request for ku is "ESC P + q 6 b 7 5 ESC \", where 6b7d=ku in hexadecimal.
-                    // Xterm response in normal cursor mode:
-                    // "<27> P 1 + r 6 b 7 5 = 1 B 5 B 4 1" where 0x1B 0x5B 0x41 = 27 91 65 = ESC [ A
-                    // Xterm response in application cursor mode:
-                    // "<27> P 1 + r 6 b 7 5 = 1 B 5 B 4 1" where 0x1B 0x4F 0x41 = 27 91 65 = ESC 0 A
-
-                    // #4 is "shift arrow left":
-                    // *** Device Control (DCS) for '#4'- 'ESC P + q 23 34 ESC \'
-                    // Response: <27> P 1 + r 2 3 3 4 = 1 B 5 B 3 1 3 B 3 2 4 4 <27> \
-                    // where 0x1B 0x5B 0x31 0x3B 0x32 0x44 = ESC [ 1 ; 2 D
-                    // which we find in: TermKeyListener.java: KEY_MAP.put(KEYMOD_SHIFT | KEYCODE_DPAD_LEFT, "\033[1;2D");
-
-                    // See http://h30097.www3.hp.com/docs/base_doc/DOCUMENTATION/V40G_HTML/MAN/MAN4/0178____.HTM for what to
-                    // respond, as well as http://www.freebsd.org/cgi/man.cgi?query=termcap&sektion=5#CAPABILITIES for
-                    // the meaning of e.g. "ku", "kd", "kr", "kl"
-
-                    for (String part : dcs.substring(2).split(";")) {
-                        if (part.length() % 2 == 0) {
-                            StringBuilder transBuffer = new StringBuilder();
-                            char c;
-                            for (int i = 0; i < part.length(); i += 2) {
-                                try {
-                                    c = (char) Long.decode("0x" + part.charAt(i) + "" + part.charAt(i + 1)).longValue();
-                                } catch (NumberFormatException e) {
-                                    Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Invalid device termcap/terminfo encoded name \"" + part + "\"", e);
-                                    continue;
-                                }
-                                transBuffer.append(c);
-                            }
-
-                            String trans = transBuffer.toString();
-                            String responseValue;
-                            switch (trans) {
-                                case "Co":
-                                case "colors":
-                                    responseValue = "256"; // Number of colors.
-                                    break;
-                                case "TN":
-                                case "name":
-                                    responseValue = "xterm";
-                                    break;
-                                default:
-                                    responseValue = KeyHandler.getCodeFromTermcap(trans, isDecsetInternalBitSet(DECSET_BIT_APPLICATION_CURSOR_KEYS),
-                                        isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD));
-                                    break;
-                            }
-                            if (responseValue == null) {
-                                switch (trans) {
-                                    case "%1": // Help key - ignore
-                                    case "&8": // Undo key - ignore.
-                                        break;
-                                    default:
-                                        Logger.logWarn(mClient, LOG_TAG, "Unhandled termcap/terminfo name: '" + trans + "'");
-                                }
-                                // Respond with invalid request:
-                                mSession.write("\033P0+r" + part + "\033\\");
-                            } else {
-                                StringBuilder hexEncoded = new StringBuilder();
-                                for (int j = 0; j < responseValue.length(); j++) {
-                                    hexEncoded.append(String.format("%02X", (int) responseValue.charAt(j)));
-                                }
-                                mSession.write("\033P1+r" + part + "=" + hexEncoded + "\033\\");
-                            }
-                        } else {
-                            Logger.logError(mClient, LOG_TAG, "Invalid device termcap/terminfo name of odd length: " + part);
-                        }
-                    }
-                }
-                // If `s..s` or `ST` received from Sixel Device Control String `DCS q s..s ST` or `DCS P1; P2; P3; q s..s ST` command.
-                else if (ESC_DCS__SIXEL) {
-                    mSixelCommandPartNum++;
-
-                    boolean isValidDcs = processSixelDcs(dcs);
-
-                    if (!isValidDcs) {
-                        clearTerminalControlArgs();
-                        clearDcsTypeVariables();
-                        finishSequence();
-                        return;
-                    }
-
-                    if (ESC_DCS__ESC && b == '\\') {
-                        int n = mScreen.sixelEnd(mCursorCol, mCursorRow, mCellWidthPixels, mCellHeightPixels);
-                        for(; n > 0; n--) {
-                            doLinefeed();
-                        }
-
-                        // Clear DCS args buffer and variables and finish sequence.
-                    } else {
-                        ESC_DCS__ESC = false;
-
-                        // Clear DCS args buffer to receive further new input in empty buffer.
-                        clearTerminalControlArgs();
-
-                        // Increase capacity to expected capacity if `Raster Attributes` command
-                        // was sent with image width and height, or to default
-                        // `SIXEL_ARGS__INITIAL_CAPACITY` set by `startIfSixelDcs()`.
-                        if (mSixelArgsCapacity != null) {
-                            ensureTerminalControlArgsCapacity(mSixelArgsCapacity);
-                        }
-
-                        // If `b` is a Color Introducer `#`, Graphics Repeat Introducer `!` or Raster Attributes `"`
-                        // command, then add to buffer and wait for more input as further arguments
-                        // need to be received for its command before it can be processed, which is
-                        // not until the next command is received.
-                        if (!collectTerminalControlArgs(b)) return;
-
-                        return;
-                    }
-                } else {
-                    if (LOG_ESCAPE_SEQUENCES)
-                        Logger.logError(mClient, LOG_TAG, "Unrecognized device control string: " + dcs);
-                }
-
-                // Clear DCS args buffer and variables and finish sequence.
-                clearTerminalControlArgs();
-                clearDcsTypeVariables();
-                finishSequence();
+    private boolean receiveControlStringDelimiter(int codePoint) {
+        if (codePoint == 24 || codePoint == 26) { // CAN or SUB
+            finishControlString(null);
+        } else if (mStringEscapePending) {
+            if (codePoint == '\\') {
+                finishControlString("\033\\");
+            } else {
+                // An ESC that does not form ST starts a new escape sequence.
+                finishControlString(null);
+                startEscapeSequence();
+                processCodePoint(codePoint);
+            }
+        } else if (codePoint == 27) {
+            mStringEscapePending = true;
+        } else if (codePoint == 7 && mEscapeState != ESC_DCS) { // BEL also terminates OSC.
+            finishControlString("\007");
         } else {
-                ESC_DCS__ESC = false;
+            return codePoint < 32 || codePoint == 127;
+        }
+        return true;
+    }
 
-                if (!collectTerminalControlArgs(b)) return;
+    private void finishControlString(String terminator) {
+        boolean isDcs = mEscapeState == ESC_DCS;
+        DcsType dcsType = mDcsType;
+        int oscCommand = mOscCommand;
+        String arguments = mTerminalControlArgs.toString();
+        clearControlStringState();
+        finishSequence();
 
-                if (ESC_DCS__CHECK_IF_SIXEL && !ESC_DCS__SIXEL) {
-                    // Check if `DCS q` or `DCS P1; P2; P3; q` received from Sixel
-                    // Device Control String `DCS q s..s ST` or `DCS P1; P2; P3; q s..s ST` command.
-                    // If received, then wait for more input after `q`.
-                    if (b == 'q') {
-                        startIfSixelDcs();
-                    } else if (b == ';' || (b >= '0' && b <= '9')) {
-                        // Ignore.
-                    } else {
-                        ESC_DCS__CHECK_IF_SIXEL = false;
-                    }
+        if (isDcs) {
+            if (terminator == null) {
+                mScreen.sixelClear();
+            } else if (dcsType == DcsType.SIXEL) {
+                for (int lines = mScreen.sixelEnd(mCursorCol, mCursorRow, mCellWidthPixels, mCellHeightPixels);
+                     lines > 0; lines--) {
+                    doLinefeed();
                 }
+            } else if (dcsType == DcsType.SETTING && arguments.equals("\"p")) {
+                mSession.write("\033P1$r64;1\"p\033\\");
+            } else if (dcsType == DcsType.TERMINFO) {
+                reportTerminfo(arguments);
+            }
+        } else if (terminator != null && oscCommand >= 0) {
+            doOsc(oscCommand, arguments, terminator);
         }
     }
 
-    public void clearDcsTypeVariables() {
-        ESC_DCS__ESC = false;
-        mIsFastPathDcs = false;
-
-        ESC_DCS__SIXEL = false;
-        ESC_DCS__CHECK_IF_SIXEL = true;
-        mSixelCommandPartNum = 0;
-        mSixelArgsCapacity = null;
-        mScreen.sixelClear();
-    }
-
-
-
-    private void startIfSixelDcs() {
-        int[] sixelDcsSetupArgs = getSixelDcsSetupArgs(mTerminalControlArgs.toString(), 0);
-        if (sixelDcsSetupArgs != null) {
-            mIsFastPathDcs = true;
-            ESC_DCS__SIXEL = true;
-            ESC_DCS__CHECK_IF_SIXEL = false;
-            mSixelCommandPartNum = 1;
-
-            // Do not actually increase capacity yet, as it will be increased by `doDcs()` after
-            // first command has been received, which is checked to see if its a `Raster Attributes`
-            // command with image width and height to calculate expected capacity.
-            mSixelArgsCapacity = SIXEL_ARGS__INITIAL_CAPACITY;
-
-            // The `P1; P2; P3;` arguements in `sixelDcsSetupArgs` are ignored as they are not supported currently (if ever).
-            mScreen.sixelStart(100, 100);
-            clearTerminalControlArgs();
-        }
-    }
-
-    private int[] getSixelDcsSetupArgs(String dcs, int index) {
-        int[] args = {/* `P1=0`/`2:1` */ 0, /* `P2=0` */ 0, /* `P3=0` */ 0};
-
-        if (dcs.charAt(index) == 'q') return args;
-
-        char ch;
-
-        int arg = 0; boolean incArg = false;
-        while (index < dcs.length()) {
-            ch = dcs.charAt(index);
-            if (ch >= '0' && ch <= '9') {
-                if (incArg) { arg++; incArg = false; }
-                args[arg] = args[arg] * 10 + ch - '0';
-                if (args[arg] < 0) { // Overflow.
-                    break;
-                }
-                index++;
-            } else if (ch == ';') {
-                index++;
-
-                if (arg == 2) {
-                    if (index < dcs.length()) {
-                        if (dcs.charAt(index) == 'q') {
-                            return args;
-                        } else {
-                            // Must be some other command, so no need to check again.
-                            ESC_DCS__CHECK_IF_SIXEL = false;
-                        }
-                    }
-                    break;
-                }
-
-                incArg = true;
-            } else if (ch == 'q') {
-                // If optional parameters `P1`, `P2` or `P3` are not all passed, or
-                // a parameter did not end with a `;`, but is followed by `q`.
-                return args;
-            } else {
-                break;
-            }
-        }
-
-        return null;
-    }
-
-    private boolean processSixelDcs(String dcs) {
-        int index = 0;
-
-        char ch;
-        int repeat = 1;
-        int color;
-        boolean isValidDcs = true;
-
-        // FIXME: Use `StringUtils.truncateLogStringWithSnippet()` when its added for logging `dcs` input
-        //  in errors as it may be truncated from end before index if error length is greater than
-        //  `Logger.LOGGER_ENTRY_MAX_SAFE_PAYLOAD`.
-        while (index < dcs.length()) {
-            ch = dcs.charAt(index);
-
-            if (
-                // Sixel data characters in the range of `?` (0x3F) to `~` (0x7E).
-                // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.2.1
-                (ch >= '?' && ch <= '~')
-                // Graphics Carriage Return `$`.
-                // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.4
-                || ch == '$'
-                // Graphics New Line `-`.
-                // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.5
-                || ch == '-'
-            ) {
-                mScreen.sixelReadData(ch, repeat);
-                index++;
-                repeat = 1;
-            }
-            // Color Introducer `#`
-            // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.3
-            else if (ch == '#') {
-                index++; // Consume '#'.
-
-                color = 0;
-                while (index < dcs.length()) {
-                    ch = dcs.charAt(index);
-                    if (ch >= '0' && ch <= '9') {
-                        color = color * 10 + ch - '0';
-                        if (color < 0) { // Overflow.
-                            Logger.logError(mClient, LOG_TAG, "The sixel color command Pc value overflow at index " + index + " of sixel input: " + dcs);
-                            isValidDcs = false;
-                            break;
-                        }
-                        index++;
+    private void receiveDcs(int codePoint) {
+        switch (mDcsType) {
+            case HEADER:
+                int length = mTerminalControlArgs.length();
+                if (codePoint == 'q') {
+                    char prefix = length == 1 ? mTerminalControlArgs.charAt(0) : 0;
+                    if (prefix == '+') {
+                        mDcsType = DcsType.TERMINFO;
+                    } else if (prefix == '$') {
+                        mDcsType = DcsType.SETTING;
+                    } else if (isSixelHeader()) {
+                        mDcsType = DcsType.SIXEL;
+                        mScreen.sixelStart();
                     } else {
-                        break;
+                        mDcsType = DcsType.DISCARD;
                     }
-                }
-
-                if (color > 255) {
-                    Logger.logError(mClient, LOG_TAG, "The sixel color command Pc value " + color + " is not between 0-255 at index " + index + " of sixel input: " + dcs);
-                    isValidDcs = false;
-                    break;
-                }
-
-                if (!isValidDcs) {
-                    break;
-                }
-
-                // Basic Colors `# Pc`
-                // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.3.1
-                if (index == dcs.length() || dcs.charAt(index) != ';') {
-                    mScreen.sixelSetColor(color);
-                }
-                // HLS or RGB Colors `# Pc; Pu; Px; Py; Pz`
-                // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.3.2
-                else if (dcs.charAt(index) == ';') {
-                    index++; // Consume ';'.
-
-                    int[] args = {0, 0, 0, 0};
-                    int arg = 0; boolean incArg = false;
-                    while (index < dcs.length()) {
-                        ch = dcs.charAt(index);
-                        if (ch >= '0' && ch <= '9') {
-                            if (incArg) { arg++; incArg = false; }
-                            args[arg] = args[arg] * 10 + ch - '0';
-                            if (args[arg] < 0) { // Overflow.
-                                String argName = "";
-                                switch (arg) { case 0: argName = "Pu"; break; case 1: argName = "pX"; break; case 2: argName = "pY"; break; case 3: argName = "pZ"; break; }
-                                Logger.logError(mClient, LOG_TAG, "The sixel non-basic color command " + argName + " value overflow at index " + index + " of sixel input: " + dcs);
-                                isValidDcs = false;
-                                break;
-                            }
-                        } else if (ch == ';') {
-                            if (arg == 3) { // Pz must not end with a ';'.
-                                Logger.logError(mClient, LOG_TAG, "The sixel non-basic color command Pz value " + args[3] + " must not end with a semicolon ';' at index " + index + " of sixel input: " + dcs);
-                                isValidDcs = false;
-                                break;
-                            }
-
-                            incArg = true;
-                        } else {
-                            break;
-                        }
-                        index++;
-                    }
-
-                    if (!isValidDcs) {
-                        break;
-                    }
-
-                    for (int i = 0; i < args.length; i++) {
-                        if (i == 0) { // Pu must equal 1 or 2.
-                            if ((args[i] != 1 && args[i] != 2)) {
-                                Logger.logError(mClient, LOG_TAG, "The sixel non-basic color command Pu value " + args[i] + " is not 1 or 2 at index " + index + " of sixel input: " + dcs);
-                                isValidDcs = false;
-                                break;
-                            }
-                        } else {
-                            int limit = 100;
-                            if (args[0] == 1 && i == 1) limit = 360;
-                            if (args[i] < 0 || args[i] > limit) {
-                                String argName = "";
-                                switch (i) { case 1: argName = "pX"; break; case 2: argName = "pY"; break; case 3: argName = "pZ"; break; }
-                                Logger.logError(mClient, LOG_TAG, "The sixel non-basic color command " + argName + " value " + args[i] + " is not between 0-" + limit + " at index " + index + " of sixel input: " + dcs);
-                                isValidDcs = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (isValidDcs && arg == 3) { // If complete spec is received and is valid.
-                        if (args[0] == 2) { // Only RGB is supported.
-                            mScreen.sixelSetRGBColor(color, args[1], args[2], args[3]);
-                        } else if (args[0] == 1) { // HLS is not supported.
-                            Logger.logError(mClient, LOG_TAG, "The sixel non-basic color command Pu value " + args[0] + " is not supported at index " + index + " of sixel input: " + dcs);
-                            mScreen.sixelIgnore();
-                            break;
-                        }
-                    } else {
-                        if (isValidDcs)
-                            Logger.logError(mClient, LOG_TAG, "The sixel non-basic color command expected 4 arguments at index " + index + " of sixel input: " + dcs);
-                        isValidDcs = false;
-                        break;
-                    }
-                }
-            }
-            // Graphics Repeat Introducer `! Pn character`.
-            // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.1
-            else if (ch == '!') {
-                index++; // Consume '!'.
-
-                repeat = 0;
-                while (index < dcs.length()) {
-                    ch = dcs.charAt(index);
-                    if (ch >= '0' && ch <= '9') {
-                        repeat = repeat * 10 + ch - '0';
-                        if (repeat < 0) { // Overflow.
-                            Logger.logError(mClient, LOG_TAG, "The sixel repeat command Pn value overflow at index " + index + " of sixel input: " + dcs);
-                            isValidDcs = false;
-                            break;
-                        }
-                        index++;
-                    } else {
-                        break;
-                    }
-                }
-
-                if (repeat > TerminalSixel.SIXEL__MAX_REPEAT) {
-                    Logger.logError(mClient, LOG_TAG, "The sixel repeat command Pn value " + repeat + " is greater than max repeat value " +
-                        TerminalSixel.SIXEL__MAX_REPEAT + " at index " + index + " of sixel input: " + dcs);
-                    mScreen.sixelIgnore();
-                    break;
-                }
-
-                if (!isValidDcs) {
-                    break;
-                }
-            }
-            // Raster Attributes `" Pan; Pad; Ph; Pv`
-            // - https://vt100.net/docs/vt3xx-gp/chapter14.html#S14.3.2
-            else if (ch == '"') {
-                index++; // Consume '"'.
-
-                int[] args = {0, 0, 0, 0};
-                int arg = 0; boolean incArg = false;
-                while (index < dcs.length()) {
-                    ch = dcs.charAt(index);
-                    if (ch >= '0' && ch <= '9') {
-                        if (incArg) { arg++; incArg = false; }
-                        args[arg] = args[arg] * 10 + ch - '0';
-                        if (args[arg] < 0) { // Overflow.
-                            String argName = "";
-                            switch (arg) { case 0: argName = "Pan"; break; case 1: argName = "Pad"; break; case 2: argName = "pH"; break; case 3: argName = "pV"; break; }
-                            Logger.logError(mClient, LOG_TAG, "The sixel raster command " + argName + " value overflow at index " + index + " of sixel input: " + dcs);
-                            isValidDcs = false;
-                            break;
-                        }
-                    } else if (ch == ';') {
-                        if (arg == 3) { // Pv must not end with a ';'.
-                            Logger.logError(mClient, LOG_TAG, "The sixel raster command Pv value " + args[3] + " must not end with a semicolon ';' at index " + index + " of sixel input: " + dcs);
-                            isValidDcs = false;
-                            break;
-                        }
-                        incArg = true;
-                    } else {
-                        break;
-                    }
-                    index++;
-                }
-
-                if (isValidDcs && arg == 3) { // If complete spec is received and is valid.
-                    // Raster pixel aspect ratio is not supported currently.
-                    // Raster "rough" horizontal and vertical size of image may be sent at start of
-                    // sixel data string, like done by `img2sixel`, so increase sixel commands args
-                    // buffer capacity (`mTerminalControlArgs`) and resize sixel bitmap in
-                    // `TerminalSixel` at start, instead of having to keep resizing buffer/bitmap
-                    // as more sixel data is received, which has a performance hit due to
-                    // memory reallocations and copying.
-                    int sixelWidth = args[2]; // `Ph`
-                    int sixelHeight = args[3]; // `Pv`
-                    if (sixelWidth > 0 && sixelHeight > 0) {
-                        // 2% extra for sixel commands/parameters in addition to image data.
-                        int sixelArgsExpectedLength = (int) (sixelWidth * sixelHeight * 1.02);
-                        // If sixel commands are too long, they are divided into parts, and if a
-                        // new command starts near `TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2`, it could
-                        // contain image data for 1 pixel line of image width, so add that.
-                        int sixelArgsPartsExpectedLength = (int) ((((double) TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2) + sixelWidth) * 1.02);
-                        int sixelArgsExpectedCapacity = Math.min(sixelArgsPartsExpectedLength, sixelArgsExpectedLength);
-                        if (sixelArgsExpectedCapacity > SIXEL_ARGS__INITIAL_CAPACITY) {
-                            mSixelArgsCapacity = sixelArgsExpectedCapacity;
-                        }
-
-                        mScreen.sixelResize(sixelWidth, sixelHeight);
-                    }
+                    clearTerminalControlArgs();
+                } else if (length < DCS_HEADER_LIMIT &&
+                    ((codePoint >= '0' && codePoint <= '9') || codePoint == ';' ||
+                        (length == 0 && (codePoint == '+' || codePoint == '$')))) {
+                    mTerminalControlArgs.append((char) codePoint);
                 } else {
-                    if (isValidDcs)
-                        Logger.logError(mClient, LOG_TAG, "The sixel raster command expected 4 arguments at index " + index + " of sixel input: " + dcs);
-                    isValidDcs = false;
-                    break;
+                    discardDcs();
                 }
-            }
-            else if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\f' || ch == '\r') {
-                index++;
-            } else {
-                // Invalid character.
-                Logger.logError(mClient, LOG_TAG, "Invalid character '" + ch + "' (" + (byte) ch + ") at index " + index + " of sixel input: " + dcs);
-                isValidDcs = false;
                 break;
-            }
+            case SIXEL:
+                if (!mScreen.sixelRead(codePoint)) discardDcs();
+                break;
+            case TERMINFO:
+            case SETTING:
+                if (mTerminalControlArgs.length() + Character.charCount(codePoint) <= CONTROL_ARGS_LIMIT) {
+                    mTerminalControlArgs.appendCodePoint(codePoint);
+                } else {
+                    discardDcs();
+                }
+                break;
+            case DISCARD:
+                break;
         }
-        
-        return isValidDcs;
     }
 
+    private void discardDcs() {
+        mScreen.sixelClear();
+        mDcsType = DcsType.DISCARD;
+        clearTerminalControlArgs();
+    }
 
+    private boolean isSixelHeader() {
+        int delimiters = 0;
+        int parameter = 0;
+        int length = mTerminalControlArgs.length();
+        for (int i = 0; i < length; i++) {
+            char value = mTerminalControlArgs.charAt(i);
+            if (value == ';') {
+                if (++delimiters == 3 && i != length - 1) return false;
+                parameter = 0;
+            } else {
+                parameter = appendDecimalDigit(parameter, value, Integer.MAX_VALUE);
+                if (parameter < 0) return false;
+            }
+        }
+        return true;
+    }
+
+    /** XTGETTCAP encodes terminal capability names and values as pairs of hex digits. */
+    private void reportTerminfo(String arguments) {
+        for (String request : arguments.split(";")) {
+            if (request.isEmpty()) continue;
+            String name = decodeTerminfoName(request);
+            if (name == null) continue;
+            String response;
+            switch (name) {
+                case "Co":
+                case "colors":
+                    response = "256";
+                    break;
+                case "TN":
+                case "name":
+                    response = "xterm";
+                    break;
+                default:
+                    response = KeyHandler.getCodeFromTermcap(name,
+                        isDecsetInternalBitSet(DECSET_BIT_APPLICATION_CURSOR_KEYS),
+                        isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD));
+                    break;
+            }
+
+            if (response == null) {
+                mSession.write("\033P0+r" + request + "\033\\");
+            } else {
+                StringBuilder encoded = new StringBuilder();
+                for (int i = 0; i < response.length(); i++) {
+                    encoded.append(String.format(Locale.ROOT, "%02X", (int) response.charAt(i)));
+                }
+                mSession.write("\033P1+r" + request + "=" + encoded + "\033\\");
+            }
+        }
+    }
+
+    private static String decodeTerminfoName(String request) {
+        if (request.length() % 2 != 0) return null;
+        StringBuilder name = new StringBuilder(request.length() / 2);
+        for (int i = 0; i < request.length(); i += 2) {
+            int high = Character.digit(request.charAt(i), 16);
+            int low = Character.digit(request.charAt(i + 1), 16);
+            if (high < 0 || low < 0) return null;
+            name.append((char) (high * 16 + low));
+        }
+        return name.toString();
+    }
+
+    private static int parseDecimal(CharSequence text, int start, int end, int limit) {
+        if (start == end) return -1;
+        int result = 0;
+        for (int i = start; i < end; i++) {
+            result = appendDecimalDigit(result, text.charAt(i), limit);
+            if (result < 0) return -1;
+        }
+        return result;
+    }
+
+    private static int appendDecimalDigit(int value, int character, int limit) {
+        int digit = character - '0';
+        if (digit < 0 || digit > 9 || value > limit / 10 ||
+            (value == limit / 10 && digit > limit % 10)) {
+            return -1;
+        }
+        return value * 10 + digit;
+    }
 
     private int nextTabStop(int numTabs) {
         for (int i = mCursorCol + 1; i < mColumns; i++)
@@ -1980,8 +1523,7 @@ public final class TerminalEmulator {
             case '0': // SS3, ignore.
                 break;
             case 'P': // Device control string
-                clearTerminalControlArgs();
-                clearDcsTypeVariables();
+                clearControlStringState();
                 continueSequence(ESC_DCS);
                 break;
             case '[':
@@ -1991,15 +1533,13 @@ public final class TerminalEmulator {
                 setDecsetinternalBit(DECSET_BIT_APPLICATION_KEYPAD, true);
                 break;
             case ']': // OSC
-                clearTerminalControlArgs();
-                mOscCommand = -1;
+                clearControlStringState();
                 continueSequence(ESC_OSC);
                 break;
             case '>': // DECKPNM
                 setDecsetinternalBit(DECSET_BIT_APPLICATION_KEYPAD, false);
                 break;
             case '_': // APC - Application Program Command.
-                clearTerminalControlArgs();
                 continueSequence(ESC_APC);
                 break;
             default:
@@ -2494,84 +2034,13 @@ public final class TerminalEmulator {
 
 
 
-    /**
-     * Receive {@link #ESC_APC}. Check its docs for more info.
-     */
-    private void receiveApc(final int b) {
-        switch (b) {
-            case 27: // Escape.
-                continueSequence(ESC_APC__ESC);
-                break;
-            default:
-                if (!collectTerminalControlArgs(b)) return;
-        }
-    }
-
-    /**
-     * Receive {@link #ESC_APC__ESC}. Check its docs for more info.
-     */
-    private void receiveApcEsc(final int b) {
-        switch (b) {
-            case '\\':
-                //doApc();
-                //clearApcTypeVariables();
-                break;
-            default:
-                // The ESC character was not followed by a \, so insert the ESC and
-                // the current character in arg buffer.
-                if (!collectTerminalControlArgs(27)) return;
-                if (!collectTerminalControlArgs(b)) return;
-                continueSequence(ESC_APC);
-                break;
-        }
-    }
-
-    /**
-     * Clear {@link #ESC_APC} type variables.
-     */
-    public void clearApcTypeVariables() {}
-
-    /**
-     * Do {@link #ESC_APC}. Check its docs for more info.
-     */
-    private void doApc() {}
-
-
-
-
     private void receiveOsc(int b) {
-        if (mEscapeState == ESC_OSC__ESC) {
-            if (b == '\\') {
-                finishOsc("\033\\");
-            } else {
-                // An ESC that does not form ST starts a new sequence.
-                finishOsc(null);
-                startEscapeSequence();
-                processCodePoint(b);
-            }
-            return;
-        }
-
-        switch (b) {
-            case 7: // BEL
-                finishOsc("\007");
-                return;
-            case 24: // CAN
-            case 26: // SUB
-                finishOsc(null);
-                return;
-            case 27: // ESC, possibly followed by ST
-                mEscapeState = ESC_OSC__ESC;
-                return;
-        }
-
-        if (b < 32 || b == 127 || mEscapeState == ESC_OSC_DISCARD) return;
+        if (mEscapeState == ESC_OSC_DISCARD) return;
         if (mEscapeState == ESC_OSC) {
             if (b >= '0' && b <= '9') {
-                int digit = b - '0';
-                int command = Math.max(0, mOscCommand);
-                if (command <= (Integer.MAX_VALUE - digit) / 10) {
-                    mOscCommand = command * 10 + digit;
+                int command = appendDecimalDigit(Math.max(0, mOscCommand), b, Integer.MAX_VALUE);
+                if (command >= 0) {
+                    mOscCommand = command;
                     return;
                 }
             } else if (b == ';') {
@@ -2594,7 +2063,7 @@ public final class TerminalEmulator {
             }
             discardOsc();
         } else {
-            int limit = mOscCommand == 52 ? OSC_CLIPBOARD_MAX_LENGTH : TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH;
+            int limit = mOscCommand == 52 ? OSC_CLIPBOARD_MAX_LENGTH : CONTROL_ARGS_LIMIT;
             if (mTerminalControlArgs.length() + Character.charCount(b) <= limit) {
                 mTerminalControlArgs.appendCodePoint(b);
             } else {
@@ -2609,15 +2078,6 @@ public final class TerminalEmulator {
         mEscapeState = ESC_OSC_DISCARD;
     }
 
-    private void finishOsc(String terminator) {
-        if (terminator != null && mOscCommand >= 0) {
-            doOsc(mOscCommand, mTerminalControlArgs.toString(), terminator);
-        }
-        clearTerminalControlArgs();
-        mOscCommand = -1;
-        finishSequence();
-    }
-
     /** Apply a supported OSC after its string terminator. */
     private void doOsc(int value, String textParameter, String bellOrStringTerminator) {
         switch (value) {
@@ -2626,109 +2086,66 @@ public final class TerminalEmulator {
             case 2: // Change window title to T.
                 setTitle(textParameter);
                 break;
-            case 4:
-                // P s = 4 ; c ; spec → Change Color Number c to the color specified by spec. This can be a name or RGB
-                // specification as per XParseColor. Any number of c name pairs may be given. The color numbers correspond
-                // to the ANSI colors 0-7, their bright versions 8-15, and if supported, the remainder of the 88-color or
-                // 256-color table.
-                // If a "?" is given rather than a name or RGB specification, xterm replies with a control sequence of the
-                // same form which can be used to set the corresponding color. Because more than one pair of color number
-                // and specification can be given in one control sequence, xterm can make more than one reply.
-                int colorIndex = -1;
-                int parsingPairStart = -1;
-                for (int i = 0; ; i++) {
-                    boolean endOfInput = i == textParameter.length();
-                    char b = endOfInput ? ';' : textParameter.charAt(i);
-                    if (b == ';') {
-                        if (parsingPairStart < 0) {
-                            parsingPairStart = i + 1;
-                        } else {
-                            if (colorIndex < 0 || colorIndex > 255) {
-                                unknownSequence(b);
-                                return;
-                            } else {
-                                mColors.tryParseColor(colorIndex, textParameter.substring(parsingPairStart, i));
-                                mSession.onColorsChanged();
-                                colorIndex = -1;
-                                parsingPairStart = -1;
-                            }
-                        }
-                    } else if (parsingPairStart >= 0) {
-                        // We have passed a color index and are now going through color spec.
-                    } else if (parsingPairStart < 0 && (b >= '0' && b <= '9')) {
-                        colorIndex = ((colorIndex < 0) ? 0 : colorIndex * 10) + (b - '0');
-                    } else {
-                        unknownSequence(b);
-                        return;
-                    }
-                    if (endOfInput) break;
+            case 4: // Set indexed colors as pairs of index and color spec.
+                for (int start = 0; start < textParameter.length(); ) {
+                    int separator = textParameter.indexOf(';', start);
+                    if (separator < 0) break;
+                    int colorIndex = parseDecimal(textParameter, start, separator, 255);
+                    if (colorIndex < 0) break;
+                    int end = textParameter.indexOf(';', separator + 1);
+                    if (end < 0) end = textParameter.length();
+                    mColors.tryParseColor(colorIndex, textParameter.substring(separator + 1, end));
+                    mSession.onColorsChanged();
+                    start = end + 1;
                 }
                 break;
             case 10: // Set foreground color.
             case 11: // Set background color.
             case 12: // Set cursor color.
-                int specialIndex = TextStyle.COLOR_INDEX_FOREGROUND + (value - 10);
-                int lastSemiIndex = 0;
-                for (int charIndex = 0; ; charIndex++) {
-                    boolean endOfInput = charIndex == textParameter.length();
-                    if (endOfInput || textParameter.charAt(charIndex) == ';') {
-                        try {
-                            String colorSpec = textParameter.substring(lastSemiIndex, charIndex);
-                            if ("?".equals(colorSpec)) {
-                                // Report current color in the same format xterm and gnome-terminal does.
-                                int rgb = mColors.mCurrentColors[specialIndex];
-                                int r = (65535 * ((rgb & 0x00FF0000) >> 16)) / 255;
-                                int g = (65535 * ((rgb & 0x0000FF00) >> 8)) / 255;
-                                int b = (65535 * ((rgb & 0x000000FF))) / 255;
-                                mSession.write("\033]" + value + ";rgb:" + String.format(Locale.US, "%04x", r) + "/" + String.format(Locale.US, "%04x", g) + "/"
-                                    + String.format(Locale.US, "%04x", b) + bellOrStringTerminator);
-                            } else {
-                                mColors.tryParseColor(specialIndex, colorSpec);
-                                mSession.onColorsChanged();
-                            }
-                            specialIndex++;
-                            if (endOfInput || (specialIndex > TextStyle.COLOR_INDEX_CURSOR) || ++charIndex >= textParameter.length())
-                                break;
-                            lastSemiIndex = charIndex;
-                        } catch (NumberFormatException e) {
-                            // Ignore.
-                        }
+                int index = TextStyle.COLOR_INDEX_FOREGROUND + (value - 10);
+                for (int start = 0; start < textParameter.length() && index <= TextStyle.COLOR_INDEX_CURSOR; index++) {
+                    int end = textParameter.indexOf(';', start);
+                    if (end < 0) end = textParameter.length();
+                    String colorSpec = textParameter.substring(start, end);
+                    if (colorSpec.equals("?")) {
+                        // Report each 8-bit RGB component expanded to the 16-bit xterm reply format.
+                        int rgb = mColors.mCurrentColors[index];
+                        int r = ((rgb >> 16) & 0xff) * 257;
+                        int g = ((rgb >> 8) & 0xff) * 257;
+                        int b = (rgb & 0xff) * 257;
+                        mSession.write("\033]" + value + ";rgb:" + String.format(Locale.US, "%04x/%04x/%04x", r, g, b) +
+                            bellOrStringTerminator);
+                    } else {
+                        mColors.tryParseColor(index, colorSpec);
+                        mSession.onColorsChanged();
                     }
+                    start = end + 1;
                 }
                 break;
-            case 52: // Manipulate Selection Data. Skip the optional first selection parameter(s).
-                int startIndex = textParameter.indexOf(";") + 1;
+            case 52: // Change clipboard contents. Ignore requests to read the clipboard.
+                String clipboardPayload = textParameter.substring(textParameter.indexOf(';') + 1);
+                if (clipboardPayload.equals("?")) break;
                 try {
-                    String clipboardText = new String(Base64.decode(textParameter.substring(startIndex), Base64.DEFAULT), StandardCharsets.UTF_8);
+                    String clipboardText = new String(Base64.decode(clipboardPayload, Base64.DEFAULT), StandardCharsets.UTF_8);
                     mSession.onCopyTextToClipboard(clipboardText);
-                } catch (Exception e) {
-                    Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                } catch (RuntimeException e) {
+                    Logger.logError(mClient, LOG_TAG, "OSC 52 clipboard request failed");
                 }
                 break;
-            case 104:
-                // "104;$c" → Reset Color Number $c. It is reset to the color specified by the corresponding X
-                // resource. Any number of c parameters may be given. These parameters correspond to the ANSI colors 0-7,
-                // their bright versions 8-15, and if supported, the remainder of the 88-color or 256-color table. If no
-                // parameters are given, the entire table will be reset.
+            case 104: // Reset all colors or the listed palette entries.
                 if (textParameter.isEmpty()) {
                     mColors.reset();
                     mSession.onColorsChanged();
                 } else {
-                    int lastIndex = 0;
-                    for (int charIndex = 0; ; charIndex++) {
-                        boolean endOfInput = charIndex == textParameter.length();
-                        if (endOfInput || textParameter.charAt(charIndex) == ';') {
-                            try {
-                                int colorToReset = Integer.parseInt(textParameter.substring(lastIndex, charIndex));
-                                mColors.reset(colorToReset);
-                                mSession.onColorsChanged();
-                                if (endOfInput) break;
-                                charIndex++;
-                                lastIndex = charIndex;
-                            } catch (NumberFormatException e) {
-                                // Ignore.
-                            }
+                    for (int start = 0; start < textParameter.length(); ) {
+                        int end = textParameter.indexOf(';', start);
+                        if (end < 0) end = textParameter.length();
+                        int colorIndex = parseDecimal(textParameter, start, end, 255);
+                        if (colorIndex >= 0) {
+                            mColors.reset(colorIndex);
+                            mSession.onColorsChanged();
                         }
+                        start = end + 1;
                     }
                 }
                 break;
@@ -2872,73 +2289,19 @@ public final class TerminalEmulator {
 
 
 
-    /** Collect code point in {@link #mTerminalControlArgs}. */
-    private boolean collectTerminalControlArgs(int b) {
-        // FIXME: Use `Logger.logErrorDebug()` and elsewhere in terminal code when support is added
-        //  to prevent logging potentially private data to logcat unless user has increased log level.
-        if (mTerminalControlArgs.length() < TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH) {
-            try {
-                // Appending can cause an increase in capacity and cause an OOM.
-                mTerminalControlArgs.appendCodePoint(b);
-                continueSequence(mEscapeState);
-                return true;
-            } catch (Throwable t) {
-                if (t instanceof OutOfMemoryError) System.gc();
-                Logger.logError(mClient, LOG_TAG, "Terminal control args collect failed for" +
-                " char '" + (char) b + "' (numeric value=" + b + ") and" +
-                " args string '" + mTerminalControlArgs.substring(0, Math.min(100, mTerminalControlArgs.length())) + "...' with length " + mTerminalControlArgs.length() +
-                ": " + t.getMessage());
-            }
-        } else {
-            Logger.logError(mClient, LOG_TAG, "Terminal control args input will" +
-                " overflow max args length " + TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH + " for" +
-                " char '" + (char) b + "' (numeric value=" + b + ") and" +
-                " args string '" + mTerminalControlArgs.substring(0, Math.min(100, mTerminalControlArgs.length())) + "...' with length " + mTerminalControlArgs.length());
-        }
-
+    private void clearControlStringState() {
+        mStringEscapePending = false;
+        mOscCommand = -1;
+        mDcsType = DcsType.HEADER;
         clearTerminalControlArgs();
-        finishSequence();
-        return false;
     }
 
-    /** Clear {@link #mTerminalControlArgs}. */
     private void clearTerminalControlArgs() {
-        if (mTerminalControlArgs.capacity() <= TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY) {
-            // Mark existing buffer as empty and reuse old array already allocated in
-            // `StringBuffer` for future commands if required.
-            mTerminalControlArgs.setLength(0);
+        if (mTerminalControlArgs.capacity() > CONTROL_ARGS_INITIAL_CAPACITY) {
+            mTerminalControlArgs = new StringBuilder(CONTROL_ARGS_INITIAL_CAPACITY);
         } else {
-            // `setLength()` will only update internal length marker and not reduce internal array
-            // capacity, and to deallocate extra memory `trimToSize()` needs to be called, which
-            // creates another smaller array.
-            // So just allocate a new object with an array with required initial capacity directly
-            // instead of setting length to 0, then trimming to create a smaller array, then
-            // increasing capacity again by creating a new array with required initial capacity by
-            // calling `ensureCapacity()`.
-            mTerminalControlArgs = new StringBuilder(TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY);
+            mTerminalControlArgs.setLength(0);
         }
-    }
-
-    /**
-     * Ensure enough capacity for {@link #mTerminalControlArgs} to prevent repeated reallocation of
-     * memory and copying as more data is received and appended, like with `append(char)`.
-     *
-     * The default capacity for {@link #mTerminalControlArgs} is defined by
-     * {@link #TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY}.
-     *
-     * By default, if `StringBuilder` reaches capacity, it sets new capacity to `(oldCapacity * 2) + 2`.
-     * So if initial capacity is `16`, and data to be received is 1024 bytes, then 6 reallocations
-     * will be done, so command processors should
-     * - https://cs.android.com/android/platform/superproject/+/android-16.0.0_r1:libcore/ojluni/src/main/java/java/lang/AbstractStringBuilder.java;l=758
-     * - https://cs.android.com/android/platform/superproject/+/android-16.0.0_r1:libcore/ojluni/src/main/java/java/lang/AbstractStringBuilder.java;l=183
-     * - https://cs.android.com/android/platform/superproject/+/android-16.0.0_r1:libcore/ojluni/src/main/java/java/lang/AbstractStringBuilder.java;l=210
-     *
-     * See also {@link StringBuilder#ensureCapacity(int)}.
-     *
-     * @param capacity The new capacity.
-     */
-    private void ensureTerminalControlArgsCapacity(int capacity) {
-        mTerminalControlArgs.ensureCapacity(capacity);
     }
 
     private void unimplementedSequence(int b) {
@@ -3226,8 +2589,8 @@ public final class TerminalEmulator {
         mColors.reset();
         mSession.onColorsChanged();
 
-        clearTerminalControlArgs();
-        mOscCommand = -1;
+        clearControlStringState();
+        mScreen.sixelClear();
     }
 
     public String getSelectedText(int x1, int y1, int x2, int y2) {

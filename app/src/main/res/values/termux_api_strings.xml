@@ -2,4 +2,6 @@
 <resources>
     <string name="share_file_chooser_title">Share with</string>
     <string name="keep_alive_service">Keeps Termux API available for command-line requests.</string>
+    <string name="counter_increase">Increase</string>
+    <string name="counter_decrease">Decrease</string>
 </resources>

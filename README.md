@@ -1,17 +1,11 @@
 # rustermux
 
-Rustermux is a standalone Android terminal and Linux userland for **64-bit ARM devices running Android 7 or later**. It uses native Android views for the interface and runs each terminal session through a PTY. The first launch installs a verified AArch64 Termux bootstrap. Use `pkg` or `apt` to install additional packages.
+Rustermux is a native Android terminal and Termux-compatible Linux userland for ARM64 phones and tablets running Android 14 or later. It runs independent PTY sessions and installs a checksum-verified AArch64 bootstrap on first launch. Use `pkg` or `apt` to install shell tools.
 
-- Open and switch between independent shell sessions, use extra keys or a hardware keyboard, and copy and paste from the terminal.
-- Choose from Gruvbox and Gruvbox Material palettes, Hack Nerd Font Mono and JetBrains Mono, or your existing terminal appearance files.
-- Call built-in Android APIs from the shell with commands such as `termux-battery-status`, `termux-clipboard-get`, and `termux-notification`. Android prompts when a command requires permission.
+Tap the session tabs to switch shells or long-press a tab for session actions. **Ctrl+Alt+Shift+Space** enters session-control mode by default. Shells keep running when the Activity goes into the background. The built-in Android API commands provide features such as clipboard access, notifications, and battery status.
 
-## Build and install
+Edit `~/.config/rustermux/config.toml` to configure fonts, Gruvbox palettes, extra keys, and shortcuts. Run `termux-reload-settings` to apply live settings. The first load can import supported legacy settings and leaves the original files in place.
 
-Use JDK 17 and the Android SDK packages listed in the [development guide](docs/development.md). From the checkout root, run `./gradlew :app:assembleDebug` and install `app/build/outputs/apk/debug/app-debug.apk` on an ARM64 device. You can also run `adb install -r app/build/outputs/apk/debug/app-debug.apk` with a device connected.
+Build with JDK 17 and the pinned Android SDK using `./gradlew :app:assembleRelease`. Distributable APKs require a private release signer. An in-place update requires a matching signing identity and compatible version. The package remains `com.termux`, and the existing home and prefix paths remain in use.
 
-Rustermux keeps the package ID `com.termux` and the existing home and prefix paths. An in-place upgrade requires the same signing identity and a compatible installed version. The repository's debug signer is public and intended for development builds. Uninstalling an existing app removes its private data.
-
-## Credits
-
-Rustermux is based on Termux and includes code from Terminal Emulator for Android plus integrated code from Termux:API. See the project and asset notices for the upstream revisions, licenses, and exceptions. [License](LICENSE.md) · [Development guide](docs/development.md)
+[Development, configuration, and signing](docs/development.md) · [Licenses](LICENSE.md)

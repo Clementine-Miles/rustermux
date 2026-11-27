@@ -2,10 +2,8 @@ package com.termux.api.apis;
 
 import android.content.Context;
 import android.content.Intent;
-import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.AudioTrack;
-import android.os.Build;
 import android.util.JsonWriter;
 
 
@@ -35,36 +33,21 @@ public class AudioAPI {
         bs = at.getBufferSizeInFrames();
         at.release();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            at = new AudioTrack.Builder()
-                .setBufferSizeInBytes(4) // one 16bit 2ch frame
-                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                .build();
-        } else {
-            AudioAttributes aa = new AudioAttributes.Builder()
-                .setFlags(AudioAttributes.FLAG_LOW_LATENCY)
-                .build();
-            at = new AudioTrack.Builder()
-                .setAudioAttributes(aa)
-                .setBufferSizeInBytes(4) // one 16bit 2ch frame
-                .build();
-        }
+        at = new AudioTrack.Builder()
+            .setBufferSizeInBytes(4) // one 16bit 2ch frame
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            .build();
         sr_ll = at.getSampleRate();
         bs_ll = at.getBufferSizeInFrames();
         at.release();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            at = new AudioTrack.Builder()
-                .setBufferSizeInBytes(4) // one 16bit 2ch frame
-                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_POWER_SAVING)
-                .build();
-            sr_ps = at.getSampleRate();
-            bs_ps = at.getBufferSizeInFrames();
-            at.release();
-        } else {
-            sr_ps = sr;
-            bs_ps = bs;
-        }
+        at = new AudioTrack.Builder()
+            .setBufferSizeInBytes(4) // one 16bit 2ch frame
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_POWER_SAVING)
+            .build();
+        sr_ps = at.getSampleRate();
+        bs_ps = at.getBufferSizeInFrames();
+        at.release();
 
         ResultReturner.returnData(apiReceiver, intent, new ResultReturner.ResultJsonWriter() {
             public void writeJson(JsonWriter out) throws Exception {

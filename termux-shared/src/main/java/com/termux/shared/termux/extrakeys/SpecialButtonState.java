@@ -39,6 +39,7 @@ public class SpecialButtonState {
     public void setIsActive(boolean value) {
         isActive = value;
         for (Button button : buttons) {
+            button.setSelected(value);
             button.setTextColor(value ? mExtraKeysView.getButtonActiveTextColor() : mExtraKeysView.getButtonTextColor());
         }
     }

@@ -1,39 +1,72 @@
 # Development
 
-## Build and checks
+## Release build and verification
 
-Install JDK 17, Android SDK Platform 36, Build Tools 35.0.0, Platform Tools, and NDK 29.0.14206865. Set `JAVA_HOME` and `ANDROID_HOME`. The Gradle wrapper verifies Gradle 9.2.1, and the project pins Android Gradle Plugin 8.13.2. Dependencies resolve from Google Maven and Maven Central. Gradle verifies the AArch64 Termux bootstrap against its pinned SHA-256 before embedding it in the APK.
+Use JDK 17, Android SDK Platform 36, Build Tools 35.0.0, Platform Tools, and NDK 29.0.14206865. Set `JAVA_HOME` and `ANDROID_HOME`. The Gradle wrapper verifies Gradle 9.2.1, and the project uses Android Gradle Plugin 8.13.2. The GitHub Actions workflow installs the pinned command-line tools and SDK packages explicitly.
 
-Run these commands from the checkout root.
+From the checkout root, run these commands.
 
 ```bash
-./gradlew :app:assembleDebug test lintDebug :termux-shared:assembleDebugAndroidTest
-apk=app/build/outputs/apk/debug/app-debug.apk
-"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+./gradlew clean :app:assembleRelease testReleaseUnitTest lintRelease :termux-shared:assembleReleaseAndroidTest
+apk=app/build/outputs/apk/release/app-release-unsigned.apk
 "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 "$apk"
 python3 tools/verify_apk.py "$apk"
 ```
 
-`./gradlew :app:assembleRelease` produces `app/build/outputs/apk/release/app-release-unsigned.apk` for release signing.
+The verifier checks package identity, SDK levels, the ABI, the application debug flag, the embedded AArch64 bootstrap, and 16 KiB ELF load alignment. It verifies the signature when the APK is signed. The instrumented library test is a separate artifact signed by the local Android test tooling. Use `./gradlew :termux-shared:connectedReleaseAndroidTest` with a booted ARM64 Android 14+ device.
 
-Run `./gradlew :termux-shared:connectedDebugAndroidTest` with an ARM64 Android device connected. The JVM tests run on the development host and the APK check verifies the ELF architecture, segment alignment, and embedded bootstrap. A device is needed to verify installation, terminal input and resizing, session lifecycle, storage integration, and runtime Android permissions.
+The app's minimum SDK and native API are 34, its compile SDK is 36, and its target SDK is 28. The target preserves the existing userland's ability to execute files from the app's writable private prefix. The upstream `apt-android-7` name identifies the userland archive that the build verifies and embeds.
 
-For an application smoke test, install the APK and open the terminal. Confirm a fresh installation reaches a shell, then run `printf 'rustermux OK\n'`, `apt list --installed`, and `termux-battery-status`. Open another session and switch back. Try clipboard and notification commands, including a notification with an unknown icon name. To verify an upgrade, create a file in the first session, install the new APK in place with the same signer, and check the file, installed packages, and appearance settings.
+## Signing and installation
+
+For a signed Release APK, give Gradle the path to the private keystore and its credentials through `RUSTERMUX_KEYSTORE`, `RUSTERMUX_KEYSTORE_PASSWORD`, `RUSTERMUX_KEY_ALIAS`, and `RUSTERMUX_KEY_PASSWORD`. Supply them through the build environment or a secret store. With all four set, the output is `app/build/outputs/apk/release/app-release.apk`. Without them the output is an unsigned build artifact, which Android requires you to sign before installation.
+
+Keep the same private signer for subsequent updates. APKs historically installed with the public development signer require users to export their data before moving to a separately signed installation. Android assigns a private UID to fresh installs on the supported platform. The legacy shared UID declaration allows Android to retain the UID of an existing compatible, same-signer installation. The application ID and prefix stay `com.termux` and `/data/data/com.termux/files/usr`.
+
+For a device smoke test, install a privately signed APK and open a shell. Run `printf 'rustermux OK\n'`, `apt list --installed`, and `termux-battery-status`. Exercise session tabs, resize the window, reload a TOML setting, and verify clipboard and notification commands. For an in-place upgrade check, create a file and change an appearance setting first, then upgrade with the same signing identity and check the file, packages, and settings.
+
+## Configuration
+
+The app creates `~/.config/rustermux/config.toml` when it is missing. The [bundled defaults](../termux-shared/src/main/assets/rustermux/default-config.toml) list schema version 1 and every supported key. This example uses one of the eight bundled palettes.
+
+```toml
+version = 1
+
+[fonts]
+family = "jetbrains-mono"
+
+[colors]
+palette = "gruvbox-light"
+
+[sessions]
+show-tab-bar = true
+
+[shortcuts]
+toggle-control = "ctrl+alt+shift+space"
+```
+
+The `terminal`, `fonts`, and `colors` tables control the terminal. The `interface` table controls app colors and window presentation. Input and extra keys have separate tables, with `sessions` and `shortcuts` for session controls. The `preferences` table holds diagnostics and integration switches. The `icons` table maps Android interface actions to code points in the bundled Hack Nerd Font Mono. Android notifications use compiled drawable resources.
+
+On first use the app imports supported values from the existing properties, custom appearance files, and app preferences, then reads the TOML file on subsequent loads. It leaves the originals in place. Missing keys inherit bundled defaults. Unknown keys are reported and preserved by Settings edits. An invalid file shows a diagnostic and keeps the last valid snapshot when available. Use a readable TrueType or OpenType file inside the Termux home directory for `fonts.custom-path`.
+
+Run `termux-reload-settings` after editing. Most settings apply in place. A terminal palette change affects terminal colors, while an unrelated setting leaves OSC color changes in running sessions alone. Working directory and transcript size apply to new sessions. Restart the app process after changing `terminal.am-socket`.
+
+## Session controls
+
+Tap a tab to switch and swipe horizontally to reach more sessions. Long-press a tab to rename it, move it, or end the process. An exited tab keeps its transcript until you close it. The empty screen allows you to open a new shell. The service owns the live sessions and selection across Activity recreation. Android process death ends those processes.
+
+**Ctrl+Alt+Shift+Space** enters or leaves session-control mode on a hardware keyboard. The session-control button provides a touch entry point. In that mode, use `n` for a new session, Left and Right to switch, Shift+Left and Shift+Right to reorder, `r` to rename, `x` to terminate, `c` to close an exited session, and `b` to toggle tabs. Escape leaves the mode. To show hidden controls by touch, long-press the terminal and choose **More → Show session tabs**. Ordinary terminal keystrokes reach the PTY while session-control mode is off. The configuration accepts different shortcuts and can disable an individual binding.
 
 ## Architecture
 
 | Module | Responsibility |
 | --- | --- |
-| `app` | Activity and service lifecycle, session settings, bootstrap installation, and the integrated Android API dispatcher and command client |
-| `terminal-emulator` | Terminal parsing, screen buffers, Sixel, and PTY JNI |
-| `terminal-view` | Android View, Canvas rendering, keyboard input, and selection |
-| `termux-shared` | File and process helpers, application settings, and the local socket and Activity Manager transport |
+| `app` | Native Activity views, service-owned sessions, staged bootstrap installation, and integrated Android APIs |
+| `terminal-emulator` | Terminal parser, screen buffers, Sixel, and the PTY JNI layer |
+| `terminal-view` | Canvas rendering, keyboard input, selection, and accessibility |
+| `termux-shared` | Configuration, file and process helpers, and local socket and Activity Manager transport |
 
-The shell environment lives in the application data directory under `files/home` and `files/usr`. A fresh bootstrap stages files before moving them into the final prefix. Existing environments keep their own package databases, configuration, and installed packages. The package ID remains `com.termux` to match paths used by Termux packages.
-
-Android preserves the shared UID for existing installations during a same-signer upgrade. New Android 13 and later installations use an app-specific UID. Older platforms still use the legacy shared UID, where Android can permit same-signer packages assigned to that UID to share access.
-
-The integrated Android API starts a private receiver through the existing Activity Manager bridge. The native client and Android process verify peer UIDs and enforce connection and response-idle deadlines. Set `TERMUX_API_TIMEOUT` in seconds to adjust the response timeout. Android controls runtime grants and access to protected hardware and data.
+Layout hierarchies are built in Java. The Android manifests and resource XML carry package components, localized strings, themes, launcher art, notification drawables, and platform shortcuts and declarations. The integrated API uses a private receiver and validates Unix socket peer identities. Connection and response-idle timeouts remain in place. Android manages permission grants and access to protected hardware.
 
 ## Upstream sources
 
@@ -46,4 +79,4 @@ The integrated Android API starts a private receiver through the existing Activi
 | [Termux API Package v0.60.0](https://github.com/termux/termux-api-package) shell and native client | `9e7f1531e1aa4a9c1e261a2dbde4de93653c366e` |
 | [Termux AM Library v2.0.0](https://github.com/termux/termux-am-library) Activity Manager commands | `d979ee308d52c59c6265ed9d9e254c97702ee4fb` |
 
-See the [root license](../LICENSE.md) and bundled notices for the Java libraries, Android APIs, shell wrappers, fonts, and palettes.
+See the [root license](../LICENSE.md) and the bundled Java, Android API, shell, font, and palette notices.

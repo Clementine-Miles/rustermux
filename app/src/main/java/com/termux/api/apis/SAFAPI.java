@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.content.UriPermission;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.FileUtils;
 import android.provider.DocumentsContract;
@@ -332,16 +331,7 @@ public class SAFAPI {
     }
 
     private static void writeInputStreamToOutputStream(InputStream in, OutputStream out) throws IOException {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            FileUtils.copy(in, out);
-        }
-        else {
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-        }
+        FileUtils.copy(in, out);
     }
 
 }

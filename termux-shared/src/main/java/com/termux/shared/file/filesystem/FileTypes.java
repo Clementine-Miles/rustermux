@@ -60,11 +60,8 @@ public class FileTypes {
      * {@code false} and {@link Os#stat(String)} if {@code followLinks} is {@code true}. All exceptions
      * are assumed as non-existence.
      *
-     * The {@link org.apache.commons.io.FileUtils#isSymlink(File)} can also be used for checking
-     * symlinks but {@link FileAttributes} will provide access to more attributes if necessary,
-     * including getting other special file types considering that {@link File#exists()} can't be
-     * used to reliably check for non-existence and exclude the other 3 file types. commons.io is
-     * also not compatible with android < 8 for many things.
+     * {@link FileAttributes} also reports special file types and distinguishes dangling links
+     * from missing files.
      *
      * https://cs.android.com/android/platform/superproject/+/android-11.0.0_r3:libcore/ojluni/src/main/java/java/io/File.java;l=793
      * https://cs.android.com/android/platform/superproject/+/android-11.0.0_r3:libcore/ojluni/src/main/java/java/io/UnixFileSystem.java;l=248

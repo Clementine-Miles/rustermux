@@ -58,7 +58,6 @@ public class TermuxAppShellEnvironment {
     /** Environment variable for the Termux app data files selinux context. */
     public static final String ENV_TERMUX_APP__SE_FILE_CONTEXT = TERMUX_APP_ENV_PREFIX + "SE_FILE_CONTEXT";
     /** Environment variable for the Termux app seInfo tag found in selinux policy used to set app process and app data files selinux context. */
-    public static final String ENV_TERMUX_APP__SE_INFO = TERMUX_APP_ENV_PREFIX + "SE_INFO";
     /** Environment variable for the Termux app user id. */
     public static final String ENV_TERMUX_APP__USER_ID = TERMUX_APP_ENV_PREFIX + "USER_ID";
     /** Environment variable for the Termux app profile owner. */
@@ -114,7 +113,7 @@ public class TermuxAppShellEnvironment {
         ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__APK_PATH, PackageUtils.getBaseAPKPathForPackage(applicationInfo));
         ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__IS_INSTALLED_ON_EXTERNAL_STORAGE, PackageUtils.isAppInstalledOnExternalStorage(applicationInfo));
 
-        putTermuxAPKSignature(currentPackageContext, environment);
+        environment.put(ENV_TERMUX_APP__APK_RELEASE, "UNKNOWN");
 
         environment.put(ENV_TERMUX_APP__PACKAGE_MANAGER, TermuxBootstrap.PACKAGE_MANAGER);
         environment.put(ENV_TERMUX_APP__PACKAGE_VARIANT, TermuxBootstrap.PACKAGE_VARIANT);
@@ -128,26 +127,12 @@ public class TermuxAppShellEnvironment {
         ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__SE_PROCESS_CONTEXT, SELinuxUtils.getContext());
         ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__SE_FILE_CONTEXT, SELinuxUtils.getFileContext(filesDirPath));
 
-        String seInfoUser = PackageUtils.getApplicationInfoSeInfoUserForPackage(applicationInfo);
-        ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__SE_INFO, PackageUtils.getApplicationInfoSeInfoForPackage(applicationInfo) +
-            (DataUtils.isNullOrEmpty(seInfoUser) ? "" : seInfoUser));
-
         ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__USER_ID, String.valueOf(PackageUtils.getUserIdForPackage(currentPackageContext)));
         ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__PROFILE_OWNER, PackageUtils.getProfileOwnerPackageNameForUser(currentPackageContext));
 
         termuxAppEnvironment = environment;
     }
 
-    /** Put {@link #ENV_TERMUX_APP__APK_RELEASE} in {@code environment}. */
-    public static void putTermuxAPKSignature(@NonNull Context currentPackageContext,
-                                             @NonNull HashMap<String, String> environment) {
-        String signingCertificateSHA256Digest = PackageUtils.getSigningCertificateSHA256DigestForPackage(currentPackageContext,
-            TermuxConstants.TERMUX_PACKAGE_NAME);
-        if (signingCertificateSHA256Digest != null) {
-            ShellEnvironmentUtils.putToEnvIfSet(environment, ENV_TERMUX_APP__APK_RELEASE,
-                TermuxUtils.getAPKRelease(signingCertificateSHA256Digest));
-        }
-    }
 
     /** Update {@link #ENV_TERMUX_APP__AM_SOCKET_SERVER_ENABLED} value in {@code environment}. */
     public synchronized static void updateTermuxAppAMSocketServerEnabled(@NonNull Context currentPackageContext) {

@@ -17,6 +17,13 @@ final class ByteQueue {
         notify();
     }
 
+    /** Stops the producer and collects the remaining bytes in the same critical section. */
+    public synchronized int closeAndRead(byte[] buffer) {
+        int read = read(buffer, false);
+        close();
+        return read;
+    }
+
     public synchronized int read(byte[] buffer, boolean block) {
         while (mStoredBytes == 0 && mOpen) {
             if (block) {

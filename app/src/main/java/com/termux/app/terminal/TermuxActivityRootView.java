@@ -3,7 +3,6 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
-import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -12,8 +11,6 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
-import androidx.annotation.Nullable;
-import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.app.TermuxActivity;
 import com.termux.shared.logger.Logger;
@@ -24,7 +21,7 @@ import com.termux.shared.view.ViewUtils;
  * The {@link TermuxActivity} relies on {@link android.view.WindowManager.LayoutParams#SOFT_INPUT_ADJUST_RESIZE)}
  * set by {@link TermuxTerminalViewClient#setSoftKeyboardState(boolean, boolean)} to automatically
  * resize the view and push the terminal up when soft keyboard is opened. However, this does not
- * always work properly. When `enforce-char-based-input=true` is set in `termux.properties`
+ * always work properly. When TOML setting `input.character-based-input` is enabled
  * and {@link com.termux.view.TerminalView#onCreateInputConnection(EditorInfo)} sets the inputType
  * to `InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS`
  * instead of the default `InputType.TYPE_NULL` for termux, some keyboards may still show suggestions.
@@ -50,8 +47,7 @@ import com.termux.shared.view.ViewUtils;
  * This overlap may happen even without `enforce-char-based-input=true` for keyboards with extended layouts
  * like number row, etc.
  *
- * To fix these issues, `activity_termux.xml` has the constant 1sp transparent
- * `activity_termux_bottom_space_view` View at the bottom. This will appear as a line matching the
+ * To detect overlap, the terminal screen places a transparent 1 dp view at the bottom. This will appear as a line matching the
  * activity theme. When {@link TermuxActivity} {@link ViewTreeObserver.OnGlobalLayoutListener} is
  * called when any of the sub view layouts change,  like keyboard opening/closing keyboard,
  * extra keys/input view switched, etc, we check if the bottom space view is visible or not.
@@ -78,14 +74,6 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
 
     public TermuxActivityRootView(Context context) {
         super(context);
-    }
-
-    public TermuxActivityRootView(Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
-
-    public TermuxActivityRootView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
-        super(context, attrs, defStyleAttr);
     }
 
     public void setActivity(TermuxActivity activity) {
@@ -289,7 +277,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     public static class WindowInsetsListener implements View.OnApplyWindowInsetsListener {
         @Override
         public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
-            mStatusBarHeight =  WindowInsetsCompat.toWindowInsetsCompat(insets).getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            mStatusBarHeight =  insets.getInsets(WindowInsets.Type.statusBars()).top;
             // Let view window handle insets however it wants
             return v.onApplyWindowInsets(insets);
         }

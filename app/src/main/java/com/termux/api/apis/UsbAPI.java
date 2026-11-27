@@ -9,14 +9,12 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.JsonWriter;
 import android.util.SparseArray;
 
 import com.termux.api.TermuxAPIConstants;
-import com.termux.api.util.PendingIntentUtils;
 import com.termux.api.util.ResultReturner;
 import com.termux.shared.logger.Logger;
 
@@ -289,20 +287,15 @@ public class UsbAPI {
             // triggered, even though permission was granted and it won't need to be requested for
             // next open request.
             // - https://developer.android.com/about/versions/12/behavior-changes-12#pending-intent-mutability
-            int pendingIntentFlags = PendingIntentUtils.getPendingIntentMutableFlag();
+            int pendingIntentFlags = PendingIntent.FLAG_MUTABLE;
             PendingIntent permissionIntent = PendingIntent.getBroadcast(this, 0, usbIntent, pendingIntentFlags);
 
             try {
                 // Specify flag to not export receiver, otherwise permission request intent will be
                 // blocked if app uses `targetSdkVersion` `>= 34`.
                 // - https://developer.android.com/about/versions/14/behavior-changes-14#runtime-receivers-exported
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    registerReceiver(usbReceiver, new IntentFilter(ACTION_USB_PERMISSION),
-                            Context.RECEIVER_NOT_EXPORTED);
-                } else {
-                    //noinspection UnspecifiedRegisterReceiverFlag
-                    registerReceiver(usbReceiver, new IntentFilter(ACTION_USB_PERMISSION));
-                }
+                registerReceiver(usbReceiver, new IntentFilter(ACTION_USB_PERMISSION),
+                        Context.RECEIVER_NOT_EXPORTED);
 
                 // Request permission and wait.
                 usbManager.requestPermission(device, permissionIntent);

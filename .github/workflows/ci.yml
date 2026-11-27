@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: gradle/actions/wrapper-validation@v6
@@ -21,19 +21,42 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v6
-      - name: Install Android SDK packages
-        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;29.0.14206865'
-      - name: Build, test, and lint
-        run: ./gradlew :app:assembleDebug test lintDebug :termux-shared:assembleDebugAndroidTest
-      - name: Verify and inspect the ARM64 APK
+      - name: Install pinned Android SDK tools and packages
+        shell: bash
         run: |
-          apk=app/build/outputs/apk/debug/app-debug.apk
+          sdk="$RUNNER_TEMP/rustermux-android-sdk"
+          archive="$RUNNER_TEMP/android-command-line-tools.zip"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
+            --output "$archive"
+          printf '%s  %s\n' 7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee "$archive" | sha256sum --check
+          mkdir -p "$sdk/cmdline-tools"
+          unzip -q "$archive" -d "$RUNNER_TEMP/rustermux-cmdline-tools"
+          mv "$RUNNER_TEMP/rustermux-cmdline-tools/cmdline-tools" "$sdk/cmdline-tools/19.0"
+          sdkmanager="$sdk/cmdline-tools/19.0/bin/sdkmanager"
+          (set +o pipefail; yes 2>/dev/null | "$sdkmanager" --sdk_root="$sdk" --licenses >/dev/null)
+          "$sdkmanager" --sdk_root="$sdk" --install \
+            'platforms;android-36' 'build-tools;35.0.0' 'platform-tools' 'ndk;29.0.14206865'
+          printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\n' "$sdk" "$sdk" >> "$GITHUB_ENV"
+      - name: Build, test, and lint Release
+        run: ./gradlew clean :app:assembleRelease testReleaseUnitTest lintRelease :termux-shared:assembleReleaseAndroidTest
+      - name: Verify the ARM64 Release APK
+        id: verify
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/app-release*.apk)
+          if (( ${#apks[@]} != 1 )); then
+            printf 'Expected one Release APK, found %s\n' "${#apks[@]}" >&2
+            exit 1
+          fi
+          apk="${apks[0]}"
           build_tools="$ANDROID_HOME/build-tools/35.0.0"
-          "$build_tools/apksigner" verify "$apk"
           "$build_tools/zipalign" -c -P 16 4 "$apk"
-          python3 tools/verify_apk.py "$apk"
+          python3 tools/verify_apk.py "$apk" --build-tools "$build_tools"
+          printf 'apk=%s\n' "$apk" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v6
         with:
-          name: rustermux-arm64-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: rustermux-arm64-release
+          path: ${{ steps.verify.outputs.apk }}
           if-no-files-found: error

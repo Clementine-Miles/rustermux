@@ -5,16 +5,15 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
-import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
+import com.termux.shared.termux.settings.config.ConfigKeys;
+import com.termux.shared.termux.settings.config.TermuxConfig;
 import com.termux.shared.theme.NightMode;
 
 public class TermuxThemeUtils {
 
-    /** Get the {@link TermuxPropertyConstants#KEY_NIGHT_MODE} value from the properties file on disk
-     * and set it to app wide night mode value. */
+    /** Apply the current TOML night-mode setting. */
     public static void setAppNightMode(@NonNull Context context) {
-        NightMode.setAppNightMode(TermuxSharedProperties.getNightMode(context));
+        NightMode.setAppNightMode(TermuxConfig.get(context).snapshot().get(ConfigKeys.NIGHT_MODE));
     }
 
     /** Set name as app wide night mode value. */

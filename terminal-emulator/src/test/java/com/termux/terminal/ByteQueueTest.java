@@ -46,6 +46,19 @@ public class ByteQueueTest extends TestCase {
 		assertFalse(q.write(new byte[]{1, 2, 3}, 0, 3));
 	}
 
+	public void testCloseDrainsTailAndRejectsLaterWrites() {
+		ByteQueue queue = new ByteQueue(4);
+		assertTrue(queue.write(new byte[]{1, 2, 3}, 0, 3));
+		assertEquals(2, queue.read(new byte[2], false));
+		assertTrue(queue.write(new byte[]{4, 5, 6}, 0, 3));
+
+		byte[] tail = new byte[4];
+		assertEquals(4, queue.closeAndRead(tail));
+		assertArrayEquals(new byte[]{3, 4, 5, 6}, tail);
+		assertFalse(queue.write(new byte[]{7}, 0, 1));
+		assertEquals(-1, queue.read(tail, false));
+	}
+
 	public void testReadNonBlocking() throws Exception {
 		ByteQueue q = new ByteQueue(10);
 		assertEquals(0, q.read(new byte[128], false));

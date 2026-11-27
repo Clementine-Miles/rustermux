@@ -91,10 +91,6 @@ public class AndroidUtils {
         AndroidUtils.appendPropertyToMarkdown(markdownString,"SE_PROCESS_CONTEXT", SELinuxUtils.getContext());
         AndroidUtils.appendPropertyToMarkdown(markdownString,"SE_FILE_CONTEXT", SELinuxUtils.getFileContext(context.getFilesDir().getAbsolutePath()));
 
-        String seInfoUser = PackageUtils.getApplicationInfoSeInfoUserForPackage(applicationInfo);
-        AndroidUtils.appendPropertyToMarkdown(markdownString,"SE_INFO", PackageUtils.getApplicationInfoSeInfoForPackage(applicationInfo) +
-            (DataUtils.isNullOrEmpty(seInfoUser) ? "" : seInfoUser));
-
         return markdownString.toString();
     }
 
@@ -106,7 +102,7 @@ public class AndroidUtils {
      * Get a markdown {@link String} for the device info.
      *
      * @param context The context for operations.
-     * @param addPhantomProcessesInfo If phantom processes info should be added on Android >= 12.
+     * @param addPhantomProcessesInfo Whether to include phantom process diagnostics.
      * @return Returns the markdown {@link String}.
      */
     public static String getDeviceInfoMarkdownString(@NonNull final Context context, boolean addPhantomProcessesInfo) {
@@ -136,15 +132,13 @@ public class AndroidUtils {
         appendPropertyToMarkdown(markdownString, "TYPE", Build.TYPE);
         appendPropertyToMarkdown(markdownString, "TAGS", Build.TAGS);
 
-        // If on Android >= 12
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
+        if (addPhantomProcessesInfo) {
             Integer maxPhantomProcesses = PhantomProcessUtils.getActivityManagerMaxPhantomProcesses(context);
             if (maxPhantomProcesses != null)
                 appendPropertyToMarkdown(markdownString, "MAX_PHANTOM_PROCESSES", maxPhantomProcesses);
             else
                 appendLiteralPropertyToMarkdown(markdownString, "MAX_PHANTOM_PROCESSES", "- (*" + context.getString(R.string.msg_requires_dump_and_package_usage_stats_permissions) + "*)");
 
-            appendPropertyToMarkdown(markdownString, "MONITOR_PHANTOM_PROCS", PhantomProcessUtils.getFeatureFlagMonitorPhantomProcsValueString(context).getName());
             appendPropertyToMarkdown(markdownString, "DEVICE_CONFIG_SYNC_DISABLED", PhantomProcessUtils.getSettingsGlobalDeviceConfigSyncDisabled(context));
         }
 

@@ -9,6 +9,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 
 import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
@@ -68,10 +69,12 @@ public final class TerminalRenderer {
         final TerminalBuffer screen = mEmulator.getScreen();
         final int[] palette = mEmulator.mColors.mCurrentColors;
         final int cursorShape = mEmulator.getCursorStyle();
+        final int selectionColor = TerminalColors.COLOR_SCHEME.selectionColor();
 
         if (reverseVideo)
             canvas.drawColor(palette[TextStyle.COLOR_INDEX_FOREGROUND], PorterDuff.Mode.SRC);
 
+        RectF bitmapDestRect = null;
         float heightOffset = mFontLineSpacingAndAscent;
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
@@ -102,25 +105,7 @@ public final class TerminalRenderer {
                 final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
                 final int codePoint = charIsHighsurrogate ? Character.toCodePoint(charAtIndex, line[currentCharIndex + 1]) : charAtIndex;
                 final long style = lineObject.getStyle(column);
-                if (TextStyle.isTerminalBitmap(style)) {
-                    Bitmap bitmap = mEmulator.getScreen().getSixelBitmap(style);
-                    if (bitmap != null) {
-                        float left = column * mFontWidth;
-                        float top = heightOffset - mFontLineSpacing;
-                        Rect bitmapSrcRect = mEmulator.getScreen().getSixelRect(style);
-                        RectF bitmapDestRect = new RectF(left, top, left + mFontWidth, top + mFontLineSpacing);
-                        canvas.drawBitmap(bitmap, bitmapSrcRect, bitmapDestRect, null);
-                    }
-                    column += 1;
-                    measuredWidthForRun = 0.f;
-                    lastRunStyle = 0;
-                    lastRunInsideCursor = false;
-                    lastRunStartColumn = column + 1;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = false;
-                    currentCharIndex += charsForCodePoint;
-                    continue;
-                }
+                final boolean bitmapCell = TextStyle.isTerminalBitmap(style);
                 final int codePointWcWidth = WcWidth.width(codePoint);
                 final boolean insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1));
                 final boolean insideSelection = column >= selx1 && column <= selx2;
@@ -133,10 +118,10 @@ public final class TerminalRenderer {
                     currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
 
-                if (style != lastRunStyle || insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection || fontWidthMismatch || lastRunFontWidthMismatch) {
-                    if (column == 0 || column == lastRunStartColumn) {
-                        // Skip first column as there is nothing to draw, just record the current style.
-                    } else {
+                if (bitmapCell || lastRunStartColumn < 0 || style != lastRunStyle ||
+                    insideCursor != lastRunInsideCursor || insideSelection != lastRunInsideSelection ||
+                    fontWidthMismatch || lastRunFontWidthMismatch) {
+                    if (lastRunStartColumn >= 0 && column > lastRunStartColumn) {
                         final int columnWidthSinceLastRun = column - lastRunStartColumn;
                         final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
                         int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
@@ -146,18 +131,32 @@ public final class TerminalRenderer {
                         }
                         drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun,
                             lastRunStartIndex, charsSinceLastRun, measuredWidthForRun,
-                            cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor || lastRunInsideSelection);
+                            cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor ||
+                                (lastRunInsideSelection && selectionColor == 0), lastRunInsideSelection ? selectionColor : 0);
+                    }
+                    if (bitmapCell) {
+                        Bitmap bitmap = screen.getSixelBitmap(style);
+                        Rect bitmapSrcRect = bitmap == null ? null : screen.getSixelRect(style);
+                        if (bitmapSrcRect != null) {
+                            float left = column * mFontWidth;
+                            float top = heightOffset - mFontLineSpacing;
+                            if (bitmapDestRect == null) bitmapDestRect = new RectF();
+                            bitmapDestRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
+                            canvas.drawBitmap(bitmap, bitmapSrcRect, bitmapDestRect, null);
+                        }
+                        lastRunStartColumn = -1;
+                    } else {
+                        lastRunStyle = style;
+                        lastRunInsideCursor = insideCursor;
+                        lastRunInsideSelection = insideSelection;
+                        lastRunStartColumn = column;
+                        lastRunStartIndex = currentCharIndex;
+                        lastRunFontWidthMismatch = fontWidthMismatch;
                     }
                     measuredWidthForRun = 0.f;
-                    lastRunStyle = style;
-                    lastRunInsideCursor = insideCursor;
-                    lastRunInsideSelection = insideSelection;
-                    lastRunStartColumn = column;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = fontWidthMismatch;
                 }
-                measuredWidthForRun += measuredCodePointWidth;
-                column += codePointWcWidth;
+                if (!bitmapCell) measuredWidthForRun += measuredCodePointWidth;
+                column += bitmapCell ? 1 : codePointWcWidth;
                 currentCharIndex += charsForCodePoint;
                 while (currentCharIndex < charsUsedInLine && WcWidth.width(line, currentCharIndex) <= 0) {
                     // Eat combining chars so that they are treated as part of the last non-combining code point,
@@ -166,21 +165,24 @@ public final class TerminalRenderer {
                 }
             }
 
-            final int columnWidthSinceLastRun = columns - lastRunStartColumn;
-            final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-            int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-            boolean invertCursorTextColor = false;
-            if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
-                invertCursorTextColor = true;
+            if (lastRunStartColumn >= 0) {
+                final int columnWidthSinceLastRun = columns - lastRunStartColumn;
+                final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                boolean invertCursorTextColor = false;
+                if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
+                    invertCursorTextColor = true;
+                }
+                drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                    measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor ||
+                        (lastRunInsideSelection && selectionColor == 0), lastRunInsideSelection ? selectionColor : 0);
             }
-            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn, columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, reverseVideo || invertCursorTextColor || lastRunInsideSelection);
         }
     }
 
     private void drawTextRun(Canvas canvas, char[] text, int[] palette, float y, int startColumn, int runWidthColumns,
                              int startCharIndex, int runWidthChars, float mes, int cursor, int cursorStyle,
-                             long textStyle, boolean reverseVideo) {
+                             long textStyle, boolean reverseVideo, int selectionColor) {
         int foreColor = TextStyle.decodeForeColor(textStyle);
         final int effect = TextStyle.decodeEffect(textStyle);
         int backColor = TextStyle.decodeBackColor(textStyle);
@@ -207,6 +209,7 @@ public final class TerminalRenderer {
             foreColor = backColor;
             backColor = tmp;
         }
+        if (selectionColor != 0) backColor = selectionColor;
 
         float left = startColumn * mFontWidth;
         float right = left + runWidthColumns * mFontWidth;
@@ -221,7 +224,7 @@ public final class TerminalRenderer {
             savedMatrix = true;
         }
 
-        if (backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
+        if (selectionColor != 0 || backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
             // Only draw non-default background.
             mTextPaint.setColor(backColor);
             canvas.drawRect(left, y - mFontLineSpacingAndAscent + mFontAscent, right, y, mTextPaint);

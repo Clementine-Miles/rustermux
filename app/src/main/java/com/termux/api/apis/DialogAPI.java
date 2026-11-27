@@ -8,12 +8,14 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.text.InputType;
 import android.util.JsonWriter;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -43,6 +45,7 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
+import com.termux.shared.view.NativeViews;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -162,17 +165,12 @@ public class DialogAPI {
          * Extract value extras from intent into String array
          */
         static String[] getInputValues(Intent intent) {
-            String[] items = new String[] { };
+            String raw = intent == null ? null : intent.getStringExtra("input_values");
+            if (raw == null) return new String[0];
 
-            if (intent != null && intent.hasExtra("input_values")) {
-                String[] temp = intent.getStringExtra("input_values").split("(?<!\\\\),");
-                items = new String[temp.length];
-
-                // remove possible whitespace from strings in temp array
-                for (int j = 0; j < temp.length; ++j) {
-                    String s = temp[j];
-                    items[j] = s.trim().replace("\\,", ",");
-                }
+            String[] items = raw.split("(?<!\\\\),");
+            for (int i = 0; i < items.length; i++) {
+                items[i] = items[i].trim().replace("\\,", ",");
             }
             return items;
         }
@@ -425,46 +423,59 @@ public class DialogAPI {
 
             @Override
             View createWidgetView(AppCompatActivity activity) {
-                View layout = View.inflate(activity, R.layout.dialog_counter, null);
-                counterLabel = layout.findViewById(R.id.counterTextView);
+                LinearLayout layout = NativeViews.column(activity);
+                layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
-                final Button incrementButton = layout.findViewById(R.id.incrementButton);
-                incrementButton.setOnClickListener(view -> increment());
+                Button increment = new Button(activity);
+                increment.setText(R.string.counter_increase);
+                increment.setMinHeight(NativeViews.dp(activity, 48));
+                increment.setOnClickListener(view -> increment());
+                layout.addView(increment);
 
-                final Button decrementButton = layout.findViewById(R.id.decrementButton);
-                decrementButton.setOnClickListener(view -> decrement());
-                updateCounterRange();
+                counterLabel = new TextView(activity);
+                counterLabel.setGravity(Gravity.CENTER);
+                counterLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                counterLabel.setTextSize(24);
+                counterLabel.setPadding(0, NativeViews.dp(activity, 8), 0, NativeViews.dp(activity, 8));
+                counterLabel.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+                layout.addView(counterLabel);
 
-                return layout;
-            }
+                Button decrement = new Button(activity);
+                decrement.setText(R.string.counter_decrease);
+                decrement.setMinHeight(NativeViews.dp(activity, 48));
+                decrement.setOnClickListener(view -> decrement());
+                layout.addView(decrement);
 
-            void updateCounterRange() {
-                final Intent intent = activity.getIntent();
-
-                if (intent.hasExtra("input_range")) {
-                    int[] values = intent.getIntArrayExtra("input_range");
-                    if (values.length != RANGE_LENGTH) {
-                        inputResult.error = "Invalid range! Must be 3 int values!";
-                        postCanceledResult();
-                        dismissDialog(dialog);
-                    } else {
-                        min = Math.min(values[0], values[1]);
-                        max = Math.max(values[0], values[1]);
-                        counter = values[2];
-                    }
+                Intent intent = activity.getIntent();
+                int[] range = intent.getIntArrayExtra("input_range");
+                if (intent.hasExtra("input_range") && (range == null || range.length != RANGE_LENGTH)) {
+                    inputResult.error = "Invalid range! Must be 3 int values!";
+                } else if (range != null) {
+                    min = Math.min(range[0], range[1]);
+                    max = Math.max(range[0], range[1]);
+                    counter = range[2];
                 } else {
                     min = DEFAULT_MIN;
                     max = DEFAULT_MAX;
-
-                    // halfway
-                    counter = (DEFAULT_MAX - DEFAULT_MIN) /  2;
+                    counter = (DEFAULT_MAX - DEFAULT_MIN) / 2;
                 }
                 updateLabel();
+                return layout;
+            }
+
+            @Override
+            public void create(AppCompatActivity activity, InputResultListener resultListener) {
+                if (inputResult.error.isEmpty()) {
+                    super.create(activity, resultListener);
+                } else {
+                    inputResult.code = Dialog.BUTTON_NEGATIVE;
+                    resultListener.onResult(inputResult);
+                }
             }
 
             @Override
             String getResult() {
-                return counterLabel.getText().toString();
+                return String.valueOf(counter);
             }
 
             void updateLabel() {
@@ -472,14 +483,14 @@ public class DialogAPI {
             }
 
             void increment() {
-                if ((counter + 1) <= max) {
+                if (counter < max) {
                     ++counter;
                     updateLabel();
                 }
             }
 
             void decrement() {
-                if ((counter - 1) >= min) {
+                if (counter > min) {
                     --counter;
                     updateLabel();
                 }
@@ -659,6 +670,7 @@ public class DialogAPI {
                 InputResult canceled = new InputResult();
                 canceled.code = Dialog.BUTTON_NEGATIVE;
                 dialog = new AlertDialog.Builder(activity)
+                    .setTitle(activity.getIntent().getStringExtra("input_title"))
                     .setItems(values, (window, selected) -> {
                         InputResult result = new InputResult();
                         result.text = values[selected];
@@ -691,7 +703,8 @@ public class DialogAPI {
             @Override
             String getResult() {
                 inputResult.index = widgetView.getSelectedItemPosition();
-                return widgetView.getSelectedItem().toString();
+                Object selected = widgetView.getSelectedItem();
+                return selected == null ? "" : selected.toString();
             }
 
             @Override
@@ -700,8 +713,8 @@ public class DialogAPI {
 
                 final Intent intent = activity.getIntent();
                 final String[] items = getInputValues(intent);
-                final ArrayAdapter<String> adapter = new ArrayAdapter<>(activity, R.layout.spinner_item, items);
-
+                ArrayAdapter<String> adapter = new ArrayAdapter<>(activity, android.R.layout.simple_spinner_item, items);
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
                 spinner.setAdapter(adapter);
                 return spinner;
             }
@@ -919,17 +932,14 @@ public class DialogAPI {
              * Places our generic widget view type inside a FrameLayout
              */
             View getLayoutView(AppCompatActivity activity, T view) {
-                FrameLayout layout = getFrameLayout(activity);
-                ViewGroup.LayoutParams params = layout.getLayoutParams();
+                FrameLayout layout = new FrameLayout(activity);
+                int inset = NativeViews.dp(activity, 24);
+                layout.setPadding(inset, inset, inset, inset);
+                layout.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
 
-                view.setLayoutParams(params);
-                layout.addView(view);
-                layout.setScrollbarFadingEnabled(false);
-
-                // wrap everything in scrollview
                 ScrollView scrollView = new ScrollView(activity);
                 scrollView.addView(layout);
-
                 return scrollView;
             }
 
@@ -974,21 +984,6 @@ public class DialogAPI {
 
             void onDismissed() {
                 postCanceledResult();
-            }
-
-            /**
-             * Create a basic frame layout that will add a margin around our main widget view
-             */
-            FrameLayout getFrameLayout(AppCompatActivity activity) {
-                FrameLayout layout = new FrameLayout(activity);
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-
-                final int margin = 56;
-                params.setMargins(margin, margin, margin, margin);
-
-                params.setMargins(56, 56, 56, 56);
-                layout.setLayoutParams(params);
-                return layout;
             }
 
             /**
