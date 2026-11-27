@@ -10,7 +10,6 @@ import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.text.TextUtils;
-import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -146,17 +145,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
         int index = service.getIndexOfSession(finishedSession);
 
-        // For plugin commands that expect the result back, we should immediately close the session
-        // and send the result back instead of waiting fo the user to press enter.
-        // The plugin can handle/show errors itself.
-        boolean isPluginExecutionCommandWithPendingResult = false;
-        TermuxSession termuxSession = service.getTermuxSession(index);
-        if (termuxSession != null) {
-            isPluginExecutionCommandWithPendingResult = termuxSession.getExecutionCommand().isPluginExecutionCommandWithPendingResult();
-            if (isPluginExecutionCommandWithPendingResult)
-                Logger.logVerbose(LOG_TAG, "The \"" + finishedSession.mSessionName + "\" session will be force finished automatically since result in pending.");
-        }
-
         if (mActivity.isVisible() && finishedSession != mActivity.getCurrentSession()) {
             // Show toast for non-current sessions that exit.
             // Verify that session was not removed before we got told about it finishing:
@@ -167,13 +155,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (mActivity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
             // On Android TV devices we need to use older behaviour because we may
             // not be able to have multiple launcher icons.
-            if (service.getTermuxSessionsSize() > 1 || isPluginExecutionCommandWithPendingResult) {
+            if (service.getTermuxSessionsSize() > 1) {
                 removeFinishedSession(finishedSession);
             }
         } else {
             // Once we have a separate launcher icon for the failsafe session, it
             // should be safe to auto-close session on exit code '0' or '130'.
-            if (finishedSession.getExitStatus() == 0 || finishedSession.getExitStatus() == 130 || isPluginExecutionCommandWithPendingResult) {
+            if (finishedSession.getExitStatus() == 0 || finishedSession.getExitStatus() == 130) {
                 removeFinishedSession(finishedSession);
             }
         }
@@ -297,9 +285,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             notifyOfSessionChange();
         }
 
-        // We call the following even when the session is already being displayed since config may
-        // be stale, like current session not selected or scrolled to.
-        checkAndScrollToSession(session);
+        termuxSessionListNotifyUpdated();
         updateBackgroundColor();
     }
 
@@ -383,7 +369,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             TerminalSession newTerminalSession = newTermuxSession.getTerminalSession();
             setCurrentSession(newTerminalSession);
 
-            mActivity.getDrawer().closeDrawers();
+            mActivity.dismissSessions();
         }
     }
 
@@ -454,22 +440,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mActivity.termuxSessionListNotifyUpdated();
     }
 
-    public void checkAndScrollToSession(TerminalSession session) {
-        if (!mActivity.isVisible()) return;
-        TermuxService service = mActivity.getTermuxService();
-        if (service == null) return;
-
-        final int indexOfSession = service.getIndexOfSession(session);
-        if (indexOfSession < 0) return;
-        final ListView termuxSessionsListView = mActivity.findViewById(R.id.terminal_sessions_list);
-        if (termuxSessionsListView == null) return;
-
-        termuxSessionsListView.setItemChecked(indexOfSession, true);
-        // Delay is necessary otherwise sometimes scroll to newly added session does not happen
-        termuxSessionsListView.postDelayed(() -> termuxSessionsListView.smoothScrollToPosition(indexOfSession), 1000);
-    }
-
-
     String toToastTitle(TerminalSession session) {
         TermuxService service = mActivity.getTermuxService();
         if (service == null) return null;
@@ -489,10 +459,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return toastTitle.toString();
     }
 
-
-    public void showAppearanceDialog() {
-        mAppearance.showDialog(this::checkForColors, this::checkForFont);
-    }
 
     private void checkForFontAndColors() {
         checkForColors();

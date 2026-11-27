@@ -17,7 +17,6 @@ import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.shell.command.runner.app.AppShell;
 import com.termux.shared.android.AndroidUtils;
 import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.TermuxUtils;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -332,8 +331,13 @@ public class TermuxFileUtils {
      * files in {@link TermuxConstants#TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY}.
      */
     public static boolean isTermuxPrefixDirectoryEmpty() {
+        List<String> scaffoldPaths = new ArrayList<>(TermuxConstants.TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY);
+        // A prior installation can be interrupted after a file is removed.
+        // Treat its empty parent directories as scaffolding on the next attempt.
+        scaffoldPaths.add(TermuxConstants.TERMUX_CONFIG_PREFIX_DIR_PATH);
+        scaffoldPaths.add(TermuxConstants.TERMUX_ETC_PREFIX_DIR_PATH);
         Error error = FileUtils.validateDirectoryFileEmptyOrOnlyContainsSpecificFiles("termux prefix",
-            TERMUX_PREFIX_DIR_PATH, TermuxConstants.TERMUX_PREFIX_DIR_IGNORED_SUB_FILES_PATHS_TO_CONSIDER_AS_EMPTY, true);
+            TERMUX_PREFIX_DIR_PATH, scaffoldPaths, true);
         if (error == null)
             return true;
 
@@ -349,11 +353,8 @@ public class TermuxFileUtils {
      * @return Returns the markdown {@link String}.
      */
     public static String getTermuxFilesStatMarkdownString(@NonNull final Context context) {
-        Context termuxPackageContext = TermuxUtils.getTermuxPackageContext(context);
-        if (termuxPackageContext == null) return null;
-
         // Also ensures that termux files directory is created if it does not already exist
-        String filesDir = termuxPackageContext.getFilesDir().getAbsolutePath();
+        String filesDir = context.getFilesDir().getAbsolutePath();
 
         // Build script
         StringBuilder statScript = new StringBuilder();

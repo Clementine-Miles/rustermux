@@ -560,6 +560,7 @@ public abstract class TermuxSharedProperties {
         return (String) SharedProperties.getDefaultIfNotInMap(TermuxPropertyConstants.KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, TermuxPropertyConstants.MAP_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, SharedProperties.toLowerCase(value), TermuxPropertyConstants.DEFAULT_IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, true, LOG_TAG);
     }
 
+
     /**
      * Returns the value itself if it is not {@code null}, otherwise returns {@link TermuxPropertyConstants#DEFAULT_IVALUE_VOLUME_KEYS_BEHAVIOUR}.
      *
@@ -568,14 +569,6 @@ public abstract class TermuxSharedProperties {
      */
     public static String getVolumeKeysBehaviourInternalPropertyValueFromValue(String value) {
         return (String) SharedProperties.getDefaultIfNotInMap(TermuxPropertyConstants.KEY_VOLUME_KEYS_BEHAVIOUR, TermuxPropertyConstants.MAP_VOLUME_KEYS_BEHAVIOUR, SharedProperties.toLowerCase(value), TermuxPropertyConstants.DEFAULT_IVALUE_VOLUME_KEYS_BEHAVIOUR, true, LOG_TAG);
-    }
-
-
-
-
-
-    public boolean shouldAllowExternalApps() {
-        return (boolean) getInternalPropertyValue(TermuxConstants.PROP_ALLOW_EXTERNAL_APPS, true);
     }
 
     public boolean isFileShareReceiverDisabled() {

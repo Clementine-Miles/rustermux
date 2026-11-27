@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 
@@ -66,7 +65,7 @@ public class TermuxApiPermissionActivity extends Activity {
         super.onCreate(savedInstanceState);
         if (savedInstanceState != null) return;
         ArrayList<String> permissionValues = getIntent().getStringArrayListExtra(PERMISSIONS_EXTRA);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && permissionValues != null) {
+        if (permissionValues != null) {
             for (String permission : permissionValues) {
                 if (!PermissionUtils.checkPermission(this, permission)) {
                     if (PermissionUtils.requestPermissions(this, permissionValues.toArray(new String[0]), REQUEST_API_PERMISSIONS)) {

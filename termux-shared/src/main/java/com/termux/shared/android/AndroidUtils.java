@@ -8,7 +8,6 @@ import android.os.Build;
 
 import androidx.annotation.NonNull;
 
-import com.google.common.base.Joiner;
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.logger.Logger;
@@ -21,6 +20,7 @@ import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
+import java.util.StringJoiner;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -51,11 +51,9 @@ public class AndroidUtils {
             AndroidUtils.appendPropertyToMarkdown(markdownString,"FILES_DIR", filesDir);
 
 
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            Long userId = PackageUtils.getUserIdForPackage(context);
-            if (userId == null || userId != 0)
-                AndroidUtils.appendPropertyToMarkdown(markdownString, "USER_ID", userId);
-        }
+        Long userId = PackageUtils.getUserIdForPackage(context);
+        if (userId == null || userId != 0)
+            AndroidUtils.appendPropertyToMarkdown(markdownString, "USER_ID", userId);
 
         AndroidUtils.appendPropertyToMarkdownIfSet(markdownString,"PROFILE_OWNER", PackageUtils.getProfileOwnerPackageNameForUser(context));
 
@@ -158,7 +156,11 @@ public class AndroidUtils {
         appendPropertyToMarkdown(markdownString, "BOARD", Build.BOARD);
         appendPropertyToMarkdown(markdownString, "HARDWARE", Build.HARDWARE);
         appendPropertyToMarkdown(markdownString, "DEVICE", Build.DEVICE);
-        appendPropertyToMarkdown(markdownString, "SUPPORTED_ABIS", Joiner.on(", ").skipNulls().join(Build.SUPPORTED_ABIS));
+        StringJoiner supportedAbis = new StringJoiner(", ");
+        for (String abi : Build.SUPPORTED_ABIS) {
+            if (abi != null) supportedAbis.add(abi);
+        }
+        appendPropertyToMarkdown(markdownString, "SUPPORTED_ABIS", supportedAbis.toString());
 
         markdownString.append("\n##\n");
 

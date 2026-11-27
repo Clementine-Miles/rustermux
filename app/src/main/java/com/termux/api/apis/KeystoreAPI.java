@@ -2,11 +2,9 @@ package com.termux.api.apis;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
-import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyInfo;
 import android.security.keystore.KeyProperties;
-import androidx.annotation.RequiresApi;
 import android.util.Base64;
 import android.util.JsonWriter;
 
@@ -44,7 +42,6 @@ public class KeystoreAPI {
     // this is the only provider name that is supported by Android
     private static final String PROVIDER = "AndroidKeyStore";
 
-    @SuppressLint("NewApi")
     public static void onReceive(TermuxApiReceiver apiReceiver, Intent intent) {
         Logger.logDebug(LOG_TAG, "onReceive");
 
@@ -74,7 +71,6 @@ public class KeystoreAPI {
      *     <li>detailed: if set, key parameters (modulus etc.) are included in the response</li>
      * </ul>
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     private static void listKeys(TermuxApiReceiver apiReceiver, final Intent intent) {
         ResultReturner.returnData(apiReceiver, intent, new ResultJsonWriter() {
             @Override
@@ -105,7 +101,6 @@ public class KeystoreAPI {
     /**
      * Helper function for printing the parameters of a given key.
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     private static void printPrivateKey(JsonWriter out, PrivateKeyEntry entry, boolean detailed)
             throws GeneralSecurityException, IOException {
         PrivateKey privateKey = entry.getPrivateKey();
@@ -192,7 +187,6 @@ public class KeystoreAPI {
      *     </li>
      * </ul>
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     @SuppressLint("WrongConstant")
     private static void generateKey(TermuxApiReceiver apiReceiver, final Intent intent) {
         ResultReturner.returnData(apiReceiver, intent, out -> {
@@ -326,7 +320,4 @@ public class KeystoreAPI {
         return byteStream.toByteArray();
     }
 
-    private static void printErrorMessage(TermuxApiReceiver apiReceiver, Intent intent) {
-        ResultReturner.returnData(apiReceiver, intent, out -> out.println("termux-keystore requires at least Android 6.0 (Marshmallow)."));
-    }
 }

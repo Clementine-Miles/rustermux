@@ -17,12 +17,12 @@ import java.io.InputStream;
 import java.util.Properties;
 
 /** Selects the inputs for the terminal's existing color and font renderer. */
-final class TerminalAppearance {
+public final class TerminalAppearance {
 
     private static final String LOG_TAG = "TerminalAppearance";
     static final String CUSTOM_FILE = "custom-file";
 
-    enum Setting {
+    public enum Setting {
         COLOR_SCHEME("terminal_color_scheme", "appearance/colors/", R.string.appearance_color_scheme,
             R.string.appearance_color_custom,
             new Option("gruvbox-material-dark-medium.properties", R.string.appearance_gruvbox_material_dark_medium),
@@ -68,7 +68,7 @@ final class TerminalAppearance {
     private final File mCustomColors;
     private final File mCustomFont;
 
-    TerminalAppearance(Context context, SharedPreferences preferences) {
+    public TerminalAppearance(Context context, SharedPreferences preferences) {
         this(context, preferences, TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE, TermuxConstants.TERMUX_FONT_FILE);
     }
 
@@ -79,24 +79,7 @@ final class TerminalAppearance {
         mCustomFont = customFont;
     }
 
-    void showDialog(Runnable onColorSelection, Runnable onFontSelection) {
-        Setting[] settings = Setting.values();
-        CharSequence[] titles = new CharSequence[settings.length];
-        for (int i = 0; i < settings.length; i++) {
-            titles[i] = mContext.getText(settings[i].title);
-        }
-
-        new AlertDialog.Builder(mContext)
-            .setTitle(R.string.action_terminal_appearance)
-            .setItems(titles, (dialog, which) -> {
-                Setting setting = settings[which];
-                showOptions(setting, setting == Setting.COLOR_SCHEME ? onColorSelection : onFontSelection);
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private void showOptions(Setting setting, Runnable onSelection) {
+    public void showOptions(Setting setting, Runnable onSelection) {
         Option[] options = setting.options;
         CharSequence[] titles = new CharSequence[options.length + 1];
         String selected = getSelection(setting);
@@ -140,7 +123,6 @@ final class TerminalAppearance {
             if (mCustomColors.isFile()) {
                 try (InputStream input = new FileInputStream(mCustomColors)) {
                     Properties colors = loadProperties(input);
-                    // The legacy companion app used a comments-only file to select the default.
                     if (!colors.isEmpty()) {
                         colorScheme.updateWith(colors);
                         return;

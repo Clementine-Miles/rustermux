@@ -8,10 +8,11 @@ buildscript {
     }
 }
 
+ext.androidNativeAbi = [name: "arm64-v8a", target: "aarch64-linux-android", bootstrapArch: "aarch64"]
+
 allprojects {
     repositories {
         google()
         mavenCentral()
-        maven { url "https://jitpack.io" }
     }
 }

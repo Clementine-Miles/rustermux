@@ -1,20 +1,14 @@
 package com.termux.shared.shell.command;
 
-import android.content.Intent;
-import android.net.Uri;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.shared.data.IntentUtils;
-import com.termux.shared.shell.command.result.ResultConfig;
 import com.termux.shared.shell.command.result.ResultData;
 import com.termux.shared.errors.Error;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.shell.command.runner.app.AppShell;
-import com.termux.terminal.TerminalSession;
 
 import java.util.Collections;
 import java.util.List;
@@ -105,41 +99,6 @@ public class ExecutionCommand {
 
     }
 
-    public enum ShellCreateMode {
-
-        /** Always create {@link TerminalSession}. */
-        ALWAYS("always"),
-
-        /** Create shell only if no shell with {@link #shellName} found. */
-        NO_SHELL_WITH_NAME("no-shell-with-name");
-
-        private final String mode;
-
-        ShellCreateMode(final String mode) {
-            this.mode = mode;
-        }
-
-        public String getMode() {
-            return mode;
-        }
-
-        public boolean equalsMode(String sessionCreateMode) {
-            return sessionCreateMode != null && sessionCreateMode.equals(this.mode);
-        }
-
-        /** Get {@link ShellCreateMode} for {@code mode} if found, otherwise {@code null}. */
-        @Nullable
-        public static ShellCreateMode modeOf(String mode) {
-            for (ShellCreateMode v : ShellCreateMode.values()) {
-                if (v.mode.equals(mode)) {
-                    return v;
-                }
-            }
-            return null;
-        }
-
-    }
-
     /** The optional unique id for the {@link ExecutionCommand}. This should equal -1 if execution
      * command is not going to be managed by a shell manager. */
     public Integer id;
@@ -155,8 +114,6 @@ public class ExecutionCommand {
 
     /** The executable for the {@link ExecutionCommand}. */
     public String executable;
-    /** The executable Uri for the {@link ExecutionCommand}. */
-    public Uri executableUri;
     /** The executable arguments array for the {@link ExecutionCommand}. */
     public String[] arguments;
     /** The stdin string for the {@link ExecutionCommand}. */
@@ -185,15 +142,11 @@ public class ExecutionCommand {
     public Integer backgroundCustomLogLevel;
 
 
-    /** The session action of {@link Runner#TERMINAL_SESSION} commands. */
-    public String sessionAction;
 
 
     /** The shell name of commands. */
     public String shellName;
 
-    /** The {@link ShellCreateMode} of commands. */
-    public String shellCreateMode;
 
     /** Whether to set {@link ExecutionCommand} shell environment. */
     public boolean setShellCommandShellEnvironment;
@@ -203,30 +156,6 @@ public class ExecutionCommand {
 
     /** The command label for the {@link ExecutionCommand}. */
     public String commandLabel;
-    /** The markdown text for the command description for the {@link ExecutionCommand}. */
-    public String commandDescription;
-    /** The markdown text for the help of command for the {@link ExecutionCommand}. This can be used
-     * to provide useful info to the user if an internal error is raised. */
-    public String commandHelp;
-
-
-    /** Defines the markdown text for the help of the Termux plugin API that was used to start the
-     * {@link ExecutionCommand}. This can be used to provide useful info to the user if an internal
-     * error is raised. */
-    public String pluginAPIHelp;
-
-
-    /** Defines the {@link Intent} received which started the command. */
-    public Intent commandIntent;
-
-    /** Defines if {@link ExecutionCommand} was started because of an external plugin request
-     * like with an intent or from within Termux app itself. */
-    public boolean isPluginExecutionCommand;
-
-    /** Defines the {@link ResultConfig} for the {@link ExecutionCommand} containing information
-     * on how to handle the result. */
-    public final ResultConfig resultConfig = new ResultConfig();
-
     /** Defines the {@link ResultData} for the {@link ExecutionCommand} containing information
      * of the result. */
     public final ResultData resultData = new ResultData();
@@ -253,11 +182,6 @@ public class ExecutionCommand {
         this.workingDirectory = workingDirectory;
         this.runner = runner;
         this.isFailsafe = isFailsafe;
-    }
-
-
-    public boolean isPluginExecutionCommandWithPendingResult() {
-        return isPluginExecutionCommand && resultConfig.isCommandWithPendingResult();
     }
 
 
@@ -389,25 +313,11 @@ public class ExecutionCommand {
                 logString.append("\n").append(executionCommand.getBackgroundCustomLogLevelLogString());
         }
 
-        if (!ignoreNull || executionCommand.sessionAction != null)
-            logString.append("\n").append(executionCommand.getSessionActionLogString());
-
         if (!ignoreNull || executionCommand.shellName != null) {
             logString.append("\n").append(executionCommand.getShellNameLogString());
         }
 
-        if (!ignoreNull || executionCommand.shellCreateMode != null) {
-            logString.append("\n").append(executionCommand.getShellCreateModeLogString());
-        }
-
         logString.append("\n").append(executionCommand.getSetRunnerShellEnvironmentLogString());
-
-        if (!ignoreNull || executionCommand.commandIntent != null)
-            logString.append("\n").append(executionCommand.getCommandIntentLogString());
-
-        logString.append("\n").append(executionCommand.getIsPluginExecutionCommandLogString());
-        if (executionCommand.isPluginExecutionCommand)
-            logString.append("\n").append(ResultConfig.getResultConfigLogString(executionCommand.resultConfig, ignoreNull));
 
         return logString.toString();
     }
@@ -436,90 +346,6 @@ public class ExecutionCommand {
 
         return logString.toString();
     }
-
-    /**
-     * Get a log friendly {@link String} for {@link ExecutionCommand} with more details.
-     *
-     * @param executionCommand The {@link ExecutionCommand} to convert.
-     * @return Returns the log friendly {@link String}.
-     */
-    public static String getDetailedLogString(final ExecutionCommand executionCommand) {
-        if (executionCommand == null) return "null";
-
-        StringBuilder logString = new StringBuilder();
-
-        logString.append(getExecutionInputLogString(executionCommand, false, true));
-        logString.append(getExecutionOutputLogString(executionCommand, false, true, true));
-
-        logString.append("\n").append(executionCommand.getCommandDescriptionLogString());
-        logString.append("\n").append(executionCommand.getCommandHelpLogString());
-        logString.append("\n").append(executionCommand.getPluginAPIHelpLogString());
-
-        return logString.toString();
-    }
-
-    /**
-     * Get a markdown {@link String} for {@link ExecutionCommand}.
-     *
-     * @param executionCommand The {@link ExecutionCommand} to convert.
-     * @return Returns the markdown {@link String}.
-     */
-    public static String getExecutionCommandMarkdownString(final ExecutionCommand executionCommand) {
-        if (executionCommand == null) return "null";
-
-        if (executionCommand.commandLabel == null) executionCommand.commandLabel = "Execution Command";
-
-        StringBuilder markdownString = new StringBuilder();
-
-        markdownString.append("## ").append(executionCommand.commandLabel).append("\n");
-
-        if (executionCommand.mPid != -1)
-            markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Pid", executionCommand.mPid, "-"));
-
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Previous State", executionCommand.previousState.getName(), "-"));
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Current State", executionCommand.currentState.getName(), "-"));
-
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Executable", executionCommand.executable, "-"));
-        markdownString.append("\n").append(getArgumentsMarkdownString("Arguments", executionCommand.arguments));
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Working Directory", executionCommand.workingDirectory, "-"));
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Runner", executionCommand.runner, "-"));
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("isFailsafe", executionCommand.isFailsafe, "-"));
-
-        if (Runner.APP_SHELL.equalsRunner(executionCommand.runner)) {
-            if (!DataUtils.isNullOrEmpty(executionCommand.stdin))
-                markdownString.append("\n").append(MarkdownUtils.getMultiLineMarkdownStringEntry("Stdin", executionCommand.stdin, "-"));
-            if (executionCommand.backgroundCustomLogLevel != null)
-                markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Background Custom Log Level", executionCommand.backgroundCustomLogLevel, "-"));
-        }
-
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Session Action", executionCommand.sessionAction, "-"));
-
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Shell Name", executionCommand.shellName, "-"));
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Shell Create Mode", executionCommand.shellCreateMode, "-"));
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Set Shell Command Shell Environment", executionCommand.setShellCommandShellEnvironment, "-"));
-
-        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("isPluginExecutionCommand", executionCommand.isPluginExecutionCommand, "-"));
-
-        markdownString.append("\n\n").append(ResultConfig.getResultConfigMarkdownString(executionCommand.resultConfig));
-
-        markdownString.append("\n\n").append(ResultData.getResultDataMarkdownString(executionCommand.resultData));
-
-        if (executionCommand.commandDescription != null || executionCommand.commandHelp != null) {
-            if (executionCommand.commandDescription != null)
-                markdownString.append("\n\n### Command Description\n\n").append(executionCommand.commandDescription).append("\n");
-            if (executionCommand.commandHelp != null)
-                markdownString.append("\n\n### Command Help\n\n").append(executionCommand.commandHelp).append("\n");
-            markdownString.append("\n##\n");
-        }
-
-        if (executionCommand.pluginAPIHelp != null) {
-            markdownString.append("\n\n### Plugin API Help\n\n").append(executionCommand.pluginAPIHelp);
-            markdownString.append("\n##\n");
-        }
-
-        return markdownString.toString();
-    }
-
 
     public String getIdLogString() {
         if (id != null)
@@ -582,45 +408,13 @@ public class ExecutionCommand {
         return "Background Custom Log Level: `" + backgroundCustomLogLevel + "`";
     }
 
-    public String getSessionActionLogString() {
-        return Logger.getSingleLineLogStringEntry("Session Action", sessionAction, "-");
-    }
-
     public String getShellNameLogString() {
         return Logger.getSingleLineLogStringEntry("Shell Name", shellName, "-");
-    }
-
-    public String getShellCreateModeLogString() {
-        return Logger.getSingleLineLogStringEntry("Shell Create Mode", shellCreateMode, "-");
     }
 
     public String getSetRunnerShellEnvironmentLogString() {
         return "Set Shell Command Shell Environment: `" + setShellCommandShellEnvironment + "`";
     }
-
-    public String getCommandDescriptionLogString() {
-        return Logger.getSingleLineLogStringEntry("Command Description", commandDescription, "-");
-    }
-
-    public String getCommandHelpLogString() {
-        return Logger.getSingleLineLogStringEntry("Command Help", commandHelp, "-");
-    }
-
-    public String getPluginAPIHelpLogString() {
-        return Logger.getSingleLineLogStringEntry("Plugin API Help", pluginAPIHelp, "-");
-    }
-
-    public String getCommandIntentLogString() {
-        if (commandIntent == null)
-            return "Command Intent: -";
-        else
-            return Logger.getMultiLineLogStringEntry("Command Intent", IntentUtils.getIntentString(commandIntent), "-");
-    }
-
-    public String getIsPluginExecutionCommandLogString() {
-        return "isPluginExecutionCommand: `" + isPluginExecutionCommand + "`";
-    }
-
 
     /**
      * Get a log friendly {@link String} for {@link List<String>} argumentsArray.
@@ -653,39 +447,4 @@ public class ExecutionCommand {
 
         return argumentsString.toString();
     }
-
-    /**
-     * Get a markdown {@link String} for {@link String[]} argumentsArray.
-     * If argumentsArray are null or of size 0, then `**Arguments:** -` is returned. Otherwise
-     * following format is returned:
-     *
-     * **Arguments:**
-     *
-     * **Arg 1:**
-     * ```
-     * value
-     * ```
-     * **Arg 2:**
-     * ```
-     * value
-     *```
-     *
-     * @param argumentsArray The {@link String[]} argumentsArray to convert.
-     * @return Returns the markdown {@link String}.
-     */
-    public static String getArgumentsMarkdownString(String label, final String[] argumentsArray) {
-        StringBuilder argumentsString = new StringBuilder("**" + label + ":**");
-
-        if (argumentsArray != null && argumentsArray.length != 0) {
-            argumentsString.append("\n");
-            for (int i = 0; i != argumentsArray.length; i++) {
-                argumentsString.append(MarkdownUtils.getMultiLineMarkdownStringEntry("Arg " + (i + 1), argumentsArray[i], "-")).append("\n");
-            }
-        } else{
-            argumentsString.append(" -  ");
-        }
-
-        return argumentsString.toString();
-    }
-
 }

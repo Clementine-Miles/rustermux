@@ -10,14 +10,12 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PersistableBundle;
-import androidx.annotation.RequiresApi;
 import android.text.TextUtils;
 
 import com.termux.api.TermuxAPIConstants;
 import com.termux.api.TermuxApiReceiver;
 import com.termux.api.util.ResultReturner;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
 
@@ -62,7 +60,6 @@ public class JobSchedulerAPI {
                 TextUtils.join(" ", description));
     }
 
-    @RequiresApi(Build.VERSION_CODES.N)
     public static void onReceive(TermuxApiReceiver apiReceiver, Context context, Intent intent) {
         Logger.logDebug(LOG_TAG, "onReceive");
 
@@ -89,7 +86,6 @@ public class JobSchedulerAPI {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.N)
     private static void runScheduleJobAction(Context context, Intent intent, PrintWriter out) {
         JobScheduler jobScheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
 
@@ -208,7 +204,6 @@ public class JobSchedulerAPI {
         }
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.N)
     private static void runCancelJobAction(Context context, Intent intent, PrintWriter out) {
         JobScheduler jobScheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
 
@@ -229,7 +224,6 @@ public class JobSchedulerAPI {
 
 
 
-    @RequiresApi(Build.VERSION_CODES.N)
     private static boolean displayPendingJob(PrintWriter out, JobScheduler jobScheduler,
                                              String actionTag, String actionLabel, int jobId) {
         JobInfo jobInfo = jobScheduler.getPendingJob(jobId);
@@ -279,22 +273,15 @@ public class JobSchedulerAPI {
 
         @Override
         public boolean onStartJob(JobParameters params) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false;
-
             Logger.logInfo(LOG_TAG, "onStartJob: " + params.toString());
 
             PersistableBundle extras = params.getExtras();
             String filePath = extras.getString(SCRIPT_FILE_PATH);
 
-            ExecutionCommand executionCommand = new ExecutionCommand();
-            executionCommand.executableUri = new Uri.Builder().scheme(TERMUX_SERVICE.URI_SCHEME_SERVICE_EXECUTE).path(filePath).build();
-            executionCommand.runner = ExecutionCommand.Runner.APP_SHELL.getName();
-
-            // Create execution intent with the action TERMUX_SERVICE#ACTION_SERVICE_EXECUTE to be sent to the TERMUX_SERVICE
-            Intent executionIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE, executionCommand.executableUri);
+            Uri script = new Uri.Builder().scheme(TERMUX_SERVICE.URI_SCHEME_SERVICE_EXECUTE).path(filePath).build();
+            Intent executionIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE, script);
             executionIntent.setClassName(TermuxConstants.TERMUX_PACKAGE_NAME, TermuxConstants.TERMUX_APP.TERMUX_SERVICE_NAME);
-            executionIntent.putExtra(TERMUX_SERVICE.EXTRA_RUNNER, executionCommand.runner);
-            executionIntent.putExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, true); // Also pass in case user using termux-app version < 0.119.0
+            executionIntent.putExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, true);
 
             Context context = getApplicationContext();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -13,13 +13,13 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
-import com.google.common.base.Joiner;
 import com.termux.shared.R;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -66,7 +66,7 @@ public class PermissionUtils {
         if (permissionsNotRequested.size() > 0) {
             Logger.logError(LOG_TAG,
                 context.getString(R.string.error_attempted_to_check_for_permissions_not_requested,
-                    Joiner.on(", ").join(permissionsNotRequested)));
+                    TextUtils.join(", ", permissionsNotRequested)));
             return false;
         }
 
@@ -93,7 +93,6 @@ public class PermissionUtils {
      *                    will fail silently and will log an exception.
      * @return Returns {@code true} if requesting the permission was successful, otherwise {@code false}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     public static boolean requestPermission(@NonNull Context context, @NonNull String permission,
                                             int requestCode) {
         return requestPermissions(context, new String[]{permission}, requestCode);
@@ -117,14 +116,13 @@ public class PermissionUtils {
      *                    will fail silently and will log an exception.
      * @return Returns {@code true} if requesting the permissions was successful, otherwise {@code false}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     public static boolean requestPermissions(@NonNull Context context, @NonNull String[] permissions,
                                              int requestCode) {
         List<String> permissionsNotRequested = getPermissionsNotRequested(context, permissions);
         if (permissionsNotRequested.size() > 0) {
             Logger.logErrorAndShowToast(context, LOG_TAG,
                 context.getString(R.string.error_attempted_to_ask_for_permissions_not_requested,
-                    Joiner.on(", ").join(permissionsNotRequested)));
+                    TextUtils.join(", ", permissionsNotRequested)));
             return false;
         }
 
@@ -282,7 +280,7 @@ public class PermissionUtils {
         if (showErrorMessage)
             Logger.showToast(context, errmsg, false);
 
-        if (requestCode < 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
+        if (requestCode < 0)
             return false;
 
         if (requestLegacyStoragePermission || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -326,7 +324,6 @@ public class PermissionUtils {
      *                    will fail silently and will log an exception.
      * @return Returns {@code true} if requesting the permission was successful, otherwise {@code false}.
      */
-    @RequiresApi(api = Build.VERSION_CODES.M)
     public static boolean requestLegacyStorageExternalPermission(@NonNull Context context, int requestCode) {
         Logger.logInfo(LOG_TAG, "Requesting legacy external storage permission");
         return requestPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE, requestCode);
@@ -448,10 +445,7 @@ public class PermissionUtils {
      * @return Returns {@code true} if permission is granted, otherwise {@code false}.
      */
     public static boolean checkDisplayOverOtherAppsPermission(@NonNull Context context) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
-            return Settings.canDrawOverlays(context);
-        else
-            return true;
+        return Settings.canDrawOverlays(context);
     }
 
     /** Wrapper for {@link #requestDisplayOverOtherAppsPermission(Context, int)}. */
@@ -472,9 +466,6 @@ public class PermissionUtils {
      */
     public static Error requestDisplayOverOtherAppsPermission(@NonNull Context context, int requestCode) {
         Logger.logInfo(LOG_TAG, "Requesting display over apps permission");
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
-            return null;
 
         Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
         intent.setData(Uri.parse("package:" + context.getPackageName()));
@@ -525,11 +516,8 @@ public class PermissionUtils {
      * @return Returns {@code true} if permission is granted, otherwise {@code false}.
      */
     public static boolean checkIfBatteryOptimizationsDisabled(@NonNull Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-            return powerManager.isIgnoringBatteryOptimizations(context.getPackageName());
-        } else
-            return true;
+        PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        return powerManager.isIgnoringBatteryOptimizations(context.getPackageName());
     }
 
     /** Wrapper for {@link #requestDisableBatteryOptimizations(Context, int)}. */
@@ -552,9 +540,6 @@ public class PermissionUtils {
     @SuppressLint("BatteryLife")
     public static Error requestDisableBatteryOptimizations(@NonNull Context context, int requestCode) {
         Logger.logInfo(LOG_TAG, "Requesting to disable battery optimizations");
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M)
-            return null;
 
         Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
         intent.setData(Uri.parse("package:" + context.getPackageName()));

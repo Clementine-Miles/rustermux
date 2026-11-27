@@ -132,8 +132,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
 
         // Skip in multi/floating window mode as the soft keyboard is detached from
         // the app window and wrong calculations may cause flicker.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N &&
-            mActivity.isInMultiWindowMode()) {
+        if (mActivity.isInMultiWindowMode()) {
             if (params.bottomMargin != 0) {
                 if (root_view_logging_enabled)
                     Logger.logVerbose(LOG_TAG, "Resetting bottom margin in multi-window mode");
@@ -251,7 +250,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             // If invisible despite margin, i.e a margin was added, but the bottom of bottomSpaceViewRect
             // is still below that of windowAvailableRect, this will trigger OnGlobalLayoutListener
             // again, so that margins are set properly. May happen when toolbar/extra keys is disabled
-            // and enabled from left drawer, just like case for isVisibleBecauseExtraMargin.
+            // and enabled again, just like the extra-margin case.
             // onMeasure: Setting bottom margin to 176
             // onGlobalLayout: windowAvailableRect 1232, bottomSpaceViewRect 1408, diff 176, bottom 176, isVisible false, isVisibleBecauseMargin false, isVisibleBecauseExtraMargin false
             // onGlobalLayout: Bottom margin already equals 176

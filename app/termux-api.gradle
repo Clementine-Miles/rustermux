@@ -20,6 +20,12 @@ abstract class BuildTermuxApiClient extends DefaultTask {
     @Input
     abstract Property<Integer> getMinimumSdk()
 
+    @Input
+    abstract Property<String> getAbi()
+
+    @Input
+    abstract Property<String> getTargetTriple()
+
     @OutputDirectory
     abstract DirectoryProperty getOutputDirectory()
 
@@ -37,34 +43,29 @@ abstract class BuildTermuxApiClient extends DefaultTask {
             throw new GradleException("Android NDK compiler was not found under " + llvm)
         }
 
-        Map<String, String> targets = [
-            "armeabi-v7a": "armv7a-linux-androideabi",
-            "arm64-v8a"  : "aarch64-linux-android",
-            "x86"        : "i686-linux-android",
-            "x86_64"     : "x86_64-linux-android"
-        ]
-        targets.each { abi, triple ->
-            File output = outputDirectory.get().file("${abi}/libtermux-api-client.so").asFile
-            output.parentFile.mkdirs()
-            execOperations.exec {
-                commandLine clang.absolutePath, "--target=${triple}${minimumSdk.get()}",
-                    "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-fPIE", "-pie", "-pthread",
-                    "-Wl,-z,max-page-size=16384", "-Wl,-z,relro,-z,now", "-Wl,--build-id=sha1",
-                    "-o", output.absolutePath, sourceFile.get().asFile.absolutePath
-            }
+        File output = outputDirectory.get().file("${abi.get()}/libtermux-api-client.so").asFile
+        output.parentFile.mkdirs()
+        execOperations.exec {
+            commandLine clang.absolutePath, "--target=${targetTriple.get()}${minimumSdk.get()}",
+                "-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "-fPIE", "-pie", "-pthread",
+                "-Wl,-z,max-page-size=16384", "-Wl,-z,relro,-z,now", "-Wl,--build-id=sha1",
+                "-o", output.absolutePath, sourceFile.get().asFile.absolutePath
         }
     }
 }
 
 androidComponents {
     def ndk = sdkComponents.ndkDirectory
+    def nativeAbi = rootProject.androidNativeAbi
     onVariants(selector().all()) { variant ->
         def client = tasks.register("build${variant.name.capitalize()}TermuxApiClient", BuildTermuxApiClient) {
             sourceFile.set(layout.projectDirectory.file("src/main/cpp/termux-api/termux-api.c"))
             ndkDirectory.set(ndk)
             ndkRevision.set(android.ndkVersion)
             minimumSdk.set(variant.minSdk.apiLevel)
-            outputDirectory.set(layout.buildDirectory.dir("generated/termux-api/${variant.name}/jniLibs"))
+            abi.set(nativeAbi.name)
+            targetTriple.set(nativeAbi.target)
+            outputDirectory.set(layout.buildDirectory.dir("generated/termux-api/${nativeAbi.name}/${variant.name}/jniLibs"))
         }
         variant.sources.jniLibs.addGeneratedSourceDirectory(client) { it.outputDirectory }
     }

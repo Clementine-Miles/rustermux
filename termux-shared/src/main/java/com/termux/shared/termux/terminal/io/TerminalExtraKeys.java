@@ -6,7 +6,7 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 
-import com.google.android.material.button.MaterialButton;
+import android.widget.Button;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.extrakeys.SpecialButton;
@@ -25,7 +25,7 @@ public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
     }
 
     @Override
-    public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+    public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, Button button) {
         if (buttonInfo.isMacro()) {
             String[] keys = buttonInfo.getKey().split(" ");
             boolean ctrlDown = false;
@@ -78,7 +78,7 @@ public class TerminalExtraKeys implements ExtraKeysView.IExtraKeysView {
     }
 
     @Override
-    public boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+    public boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, Button button) {
         return false;
     }
 

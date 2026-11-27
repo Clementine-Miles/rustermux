@@ -10,8 +10,6 @@ import android.os.Build;
 import android.os.Process;
 import android.provider.Settings;
 
-import androidx.annotation.RequiresApi;
-
 import com.termux.api.apis.AudioAPI;
 import com.termux.api.apis.BatteryStatusAPI;
 import com.termux.api.apis.BrightnessAPI;
@@ -67,16 +65,10 @@ public class TermuxApiReceiver extends BroadcastReceiver {
         boolean notificationReply = NotificationAPI.ACTION_NOTIFICATION_REPLY.equals(intent.getAction());
         try {
             if (notificationReply) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    NotificationAPI.onReceiveReplyToNotification(this, context, intent);
-                }
+                NotificationAPI.onReceiveReplyToNotification(this, context, intent);
                 return;
             }
             if (!ResultReturner.hasOutputSocket(intent)) return;
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                ResultReturner.returnError(this, intent, TermuxAPIConstants.UNSUPPORTED_ANDROID_VERSION);
-                return;
-            }
             String apiMethod = intent.getStringExtra("api_method");
             if (apiMethod == null || apiMethod.isEmpty()) {
                 ResultReturner.returnError(this, intent, "Missing API method");
@@ -91,7 +83,6 @@ public class TermuxApiReceiver extends BroadcastReceiver {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.N)
     private void doWork(Context context, Intent intent, String apiMethod) {
         switch (apiMethod) {
             case "AudioInfo":

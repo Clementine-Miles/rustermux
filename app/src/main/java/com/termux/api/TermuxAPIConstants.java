@@ -6,7 +6,6 @@ public final class TermuxAPIConstants {
 
     public static final String API_NAMESPACE = TERMUX_PACKAGE_NAME + ".api";
     public static final String TERMUX_API_FILE_SHARE_URI_AUTHORITY = API_NAMESPACE + ".sharedfiles";
-    public static final String UNSUPPORTED_ANDROID_VERSION = "Termux API requires Android 7 or later";
 
     private TermuxAPIConstants() {
     }

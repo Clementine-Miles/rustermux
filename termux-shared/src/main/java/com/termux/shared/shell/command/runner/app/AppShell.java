@@ -4,11 +4,11 @@ import android.content.Context;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.common.base.Joiner;
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.shell.command.ExecutionCommand;
@@ -123,7 +123,7 @@ public final class AppShell {
         Logger.logDebugExtended(LOG_TAG, ExecutionCommand.getExecutionInputLogString(executionCommand,
             true, Logger.shouldEnableLoggingForCustomLogLevel(executionCommand.backgroundCustomLogLevel)));
         Logger.logVerboseExtended(LOG_TAG, "\"" + executionCommand.getCommandIdAndLabelLogString() + "\" AppShell Environment:\n" +
-            Joiner.on("\n").join(environmentArray));
+            TextUtils.join("\n", environmentArray));
 
         // Exec the process
         final Process process;
@@ -245,39 +245,7 @@ public final class AppShell {
         AppShell.processAppShellResult(this, null);
     }
 
-    /**
-     * Kill this {@link AppShell} by sending a {@link OsConstants#SIGILL} to its {@link #mProcess}
-     * if its still executing.
-     *
-     * @param context The {@link Context} for operations.
-     * @param processResult If set to {@code true}, then the {@link #processAppShellResult(AppShell, ExecutionCommand)}
-     *                      will be called to process the failure.
-     */
-    public void killIfExecuting(@NonNull final Context context, boolean processResult) {
-        // If execution command has already finished executing, then no need to process results or send SIGKILL
-        if (mExecutionCommand.hasExecuted()) {
-            Logger.logDebug(LOG_TAG, "Ignoring sending SIGKILL to \"" + mExecutionCommand.getCommandIdAndLabelLogString() + "\" AppShell since it has already finished executing");
-            return;
-        }
-
-        Logger.logDebug(LOG_TAG, "Send SIGKILL to \"" + mExecutionCommand.getCommandIdAndLabelLogString() + "\" AppShell");
-
-        if (mExecutionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), context.getString(R.string.error_sending_sigkill_to_process))) {
-            if (processResult) {
-                mExecutionCommand.resultData.exitCode = 137; // SIGKILL
-                AppShell.processAppShellResult(this, null);
-            }
-        }
-
-        if (mExecutionCommand.isExecuting()) {
-            kill();
-        }
-    }
-
-    /**
-     * Kill this {@link AppShell} by sending a {@link OsConstants#SIGILL} to its {@link #mProcess}.
-     */
-    public void kill() {
+    private void kill() {
         int pid = ShellUtils.getPid(mProcess);
         try {
             // Send SIGKILL to process

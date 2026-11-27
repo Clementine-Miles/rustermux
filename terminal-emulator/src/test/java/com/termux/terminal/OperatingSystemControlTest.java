@@ -2,7 +2,9 @@ package com.termux.terminal;
 
 import android.util.Base64;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -191,6 +193,72 @@ public class OperatingSystemControlTest extends TerminalTestCase {
 		// e.g. script posted at http://superuser.com/questions/157563/programmatic-access-to-current-xterm-background-color
 		// relies on:
 		assertEnteringStringGivesResponse("\033]10;?\033\\", "\033]10;rgb:abab/cdcd/0000\033\\");
+	}
+
+	public void testUnsupportedOscDiscardsFragmentedPayloadUntilStringTerminator() {
+		withTerminalSized(8, 2);
+		enterString("A\033]");
+		enterString("13");
+		enterString("37;File=inline=1;size=999999999:");
+		byte[] payload = new byte[32 * 1024];
+		Arrays.fill(payload, (byte) 'A');
+		for (int i = 0; i < 8; i++) {
+			mTerminal.append(payload, payload.length);
+		}
+		enterString("\r\n\t\b\033");
+		assertLinesAre("A       ", "        ");
+		enterString("\\B").assertLinesAre("AB      ", "        ");
+		assertEquals("", mOutput.getOutputAndClear());
+		assertEquals(0, mOutput.bellsRung);
+	}
+
+	public void testUnsupportedOscMultipartAndQueryAreIgnored() {
+		withTerminalSized(8, 2)
+			.enterString("A\033]1337;MultipartFile=inline=1\007")
+			.enterString("\033]1337;FilePart=YWJj\033\\")
+			.enterString("\033]1337;FileEnd\007")
+			.enterString("\033]1337;ReportCellSize\007B")
+			.assertLinesAre("AB      ", "        ");
+		assertEquals("", mOutput.getOutputAndClear());
+		assertEquals(0, mOutput.bellsRung);
+	}
+
+	public void testMalformedOscAndInvalidUtf8StayOutOfTheScreen() {
+		withTerminalSized(8, 2).enterString("A\033]1337x;File=broken:");
+		byte[] incompleteUtf8 = {(byte) 0xc2};
+		mTerminal.append(incompleteUtf8, incompleteUtf8.length);
+		enterString("YWJj\007\033]4294967298;unexpected title\007B")
+			.assertLinesAre("AB      ", "        ");
+		assertNull(mTerminal.getTitle());
+	}
+
+	public void testTruncatedOscCanBeCancelledOrSuperseded() {
+		withTerminalSized(8, 2).enterString("A\033]1337;File=inline=1:YWJj");
+		enterString("\030B\033]1337;FilePart=");
+		enterString("\032C\033]1337;File=truncated");
+		enterString("\033");
+		enterString("[2;2HD").assertLinesAre("ABC     ", " D      ");
+		enterString("\033]1337;File=again\033]2;recovered\007");
+		assertEquals("recovered", mTerminal.getTitle());
+	}
+
+	public void testOversizedSupportedOscDiscardsTextWithoutSettingTitle() {
+		withTerminalSized(8, 2).enterString("\033]2;Original\007A\033]2;");
+		byte[] payload = new byte[32 * 1024];
+		Arrays.fill(payload, (byte) 'a');
+		mTerminal.append(payload, payload.length);
+		enterString("\007B").assertLinesAre("AB      ", "        ");
+		assertEquals("Original", mTerminal.getTitle());
+	}
+
+	public void testSupportedOscCanSpanUtf8AndTerminatorBoundaries() {
+		withTerminalSized(8, 2);
+		byte[] title = "\033]2;Café\033\\X".getBytes(StandardCharsets.UTF_8);
+		for (byte value : title) {
+			mTerminal.append(new byte[] {value}, 1);
+		}
+		assertEquals("Café", mTerminal.getTitle());
+		assertLinesAre("X       ", "        ");
 	}
 
 }

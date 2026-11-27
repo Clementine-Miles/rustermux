@@ -70,41 +70,9 @@ public final class TerminalEmulator {
     private static final int ESC_CSI_DOLLAR = 8;
     /** Escape processing: ESC % */
     private static final int ESC_PERCENT = 9;
-    /**
-     * Escape processing: `ESC ]` for Operating System Command (OSC)
-     * <p>
-     * `OSC` commands may be in one of the following formats:
-     * - `OSC Ps ; Pt BEL` where `BEL` is the bell control passed as `\a`.
-     * - `OSC Ps ; Pt ST` where `ST` is the string terminator passed as `ESC \`.
-     * `ST` is the preferred standard for modern terminals.
-     * <p>
-     * If an `OSC` escape sequence is received, then {@link #mEscapeState} is set to {@link #ESC_OSC}
-     * and {@link #receiveOsc(int)} is called by {@link #processCodePoint(int)}.
-     * - By default it will add bytes received after `OSC` escape sequence to {@link #mTerminalControlArgs}.
-     * - If a `BEL` is received, then {@link #doOsc(String)} is called to process
-     *   the OSC command.
-     * - If an `ESC` is received, then {@link #mEscapeState} is set to {@link #ESC_OSC__ESC} and
-     *   {@link #receiveOscEsc(int)} is called for the next code point.
-     *   - If the next code point is a `\` for `ST`, then {@link #doOsc(String)} is
-     *     called to process the OSC command.
-     *   - If the next code point is not a `\`, then {@link #mEscapeState} is set back to
-     *     {@link #ESC_OSC} as `ESC` may be part of command data as so it is added to
-     *     {@link #mTerminalControlArgs}, and for later code points {@link #receiveOsc(int)} is called
-     *     instead.
-     * <p>
-     * While an `OSC` is being received, {@link #mOscType} may be set to the command type when it
-     * has been fully received by {@link #setOscTypeVariables()}.
-     * <p>
-     * See also {@link #mIsFastPathOsc} for enabling fast path for specific `OSC` commands if required
-     * via {@link #setOscTypeVariables()}.
-     * <p>
-     * See also {@link #mIgnoreCrLfForOsc} to prevent printing of CR/LF characters for specific
-     * `OSC` commands if required via {@link #setOscTypeVariables()}.
-     * <p>
-     * - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Operating-System-Commands
-     */
+    /** Parse an OSC command number after ESC ]. */
     private static final int ESC_OSC = 10;
-    /** Escape processing: `ESC` received while receiving a {@link #ESC_OSC} command.  */
+    /** Parse the string terminator or the next escape after an ESC inside an OSC. */
     private static final int ESC_OSC__ESC = 11;
     /** Escape processing: ESC [ > */
     private static final int ESC_CSI_BIGGERTHAN = 12;
@@ -171,6 +139,10 @@ public final class TerminalEmulator {
     private static final int ESC_CSI_UNSUPPORTED_PARAMETER_BYTE = 22;
     /** Escape processing: ESC [ <parameter bytes> <intermediate bytes> */
     private static final int ESC_CSI_UNSUPPORTED_INTERMEDIATE_BYTE = 23;
+
+    /** Receive the parameter of a supported OSC or skip an unsupported or oversized string. */
+    private static final int ESC_OSC_PARAMETER = 24;
+    private static final int ESC_OSC_DISCARD = 25;
 
     /** The number of parameter arguments including colon separated sub-parameters. */
     private static final int MAX_ESCAPE_PARAMETERS = 32;
@@ -275,43 +247,17 @@ public final class TerminalEmulator {
 
     /**
      * The default max length for {@link #mTerminalControlArgs}.
-     * Needs to be large enough to contain reasonable OSC 52 pastes, sixel and iterm images data.
+     * Also bounds the shared buffer while Sixel commands are processed in chunks.
      */
     private static final int TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH = 16384;
-
-    /**
-     * The max length for {@link #mTerminalControlArgs} used by {@link #collectTerminalControlArgs(int)}.
-     */
-    private int mTerminalControlArgsMaxLength = TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH;
 
     /** The terminal control arguments string buffer, like for OSC, DCS, APC commands. */
     private StringBuilder mTerminalControlArgs = new StringBuilder(TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY);
 
 
 
-    /**
-     * The integer Operating System Command `type` received as `ESC ] type ;`.
-     * This will be set as soon as `type` followed by `;` is received, and before any further
-     * optional parameters are received.
-     */
-    private int mOscType = -1;
-
-    /**
-     * If `true`, then `processCodePoint()` will directly call `receiveOsc()` as a fast path
-     * without additional checks.
-     *
-     * Can be enabled for OSC commands via {@link #setOscTypeVariables()}.
-     */
-    private boolean mIsFastPathOsc = false;
-
-    /**
-     * If `true`, then `processCodePoint()` will not print any CR/LF characters received.
-     * This is ignored if `mIsFastPathOsc` is already `true` for a command.
-     *
-     * Can be enabled for OSC commands via {@link #setOscTypeVariables()}.
-     */
-    private boolean mIgnoreCrLfForOsc = false;
-
+    private static final int OSC_CLIPBOARD_MAX_LENGTH = 100 * 1024;
+    private int mOscCommand = -1;
 
     /**
      * If `true`, then `processCodePoint()` will directly call `doDcs()` as a fast path
@@ -345,11 +291,6 @@ public final class TerminalEmulator {
      * The initial capacity for sixel args stored in {@link #mTerminalControlArgs}.
      */
     private static final int SIXEL_ARGS__INITIAL_CAPACITY = 256;
-
-
-
-    /** The {@link ITermImage} if an iTerm image command is being processed. */
-    private ITermImage mITermImage;
 
 
 
@@ -516,22 +457,6 @@ public final class TerminalEmulator {
 
     public TerminalBuffer getScreen() {
         return mScreen;
-    }
-
-    public int getRows() {
-        return mRows;
-    }
-
-    public int getColumns() {
-        return mColumns;
-    }
-
-    public int getCellWidthPixels() {
-        return mCellWidthPixels;
-    }
-
-    public int getCellHeightPixels() {
-        return mCellHeightPixels;
     }
 
     public boolean isAlternateBufferActive() {
@@ -726,7 +651,7 @@ public final class TerminalEmulator {
             } else {
                 // Not a UTF-8 continuation byte so replace the entire sequence up to now with the replacement char:
                 mUtf8Index = mUtf8ToFollow = 0;
-                emitCodePoint(UNICODE_REPLACEMENT_CHAR);
+                processCodePoint(UNICODE_REPLACEMENT_CHAR);
                 // The Unicode Standard Version 6.2 – Core Specification
                 // (http://www.unicode.org/versions/Unicode6.2.0/ch03.pdf):
                 // "If the converter encounters an ill-formed UTF-8 code unit sequence which starts with a valid first
@@ -758,11 +683,13 @@ public final class TerminalEmulator {
     public void processCodePoint(int b) {
         mScreen.doTerminalBitmapsGC(300000);
 
-        if (mEscapeState == ESC_OSC && mIsFastPathOsc) {
-            mContinueSequence = false;
-            receiveOsc(b);
-            if (!mContinueSequence) mEscapeState = ESC_NONE;
-            return;
+        switch (mEscapeState) {
+            case ESC_OSC:
+            case ESC_OSC_PARAMETER:
+            case ESC_OSC_DISCARD:
+            case ESC_OSC__ESC:
+                receiveOsc(b);
+                return;
         }
 
         if (mEscapeState == ESC_DCS && mIsFastPathDcs) {
@@ -792,11 +719,8 @@ public final class TerminalEmulator {
         switch (b) {
             case 0: // Null character (NUL, ^@). Do nothing.
                 break;
-            case 7: // Bell (BEL, ^G, \a). If in an OSC sequence, BEL may terminate a string; otherwise signal bell.
-                if (mEscapeState == ESC_OSC)
-                    receiveOsc(b);
-                else
-                    mSession.onBell();
+            case 7: // Bell (BEL, ^G, \a).
+                mSession.onBell();
                 break;
             case 8: // Backspace (BS, ^H).
                 if (mLeftMargin == mCursorCol) {
@@ -823,19 +747,10 @@ public final class TerminalEmulator {
             case 10: // Line feed (LF, \n).
             case 11: // Vertical tab (VT, \v).
             case 12: // Form feed (FF, \f).
-                // Ignore CR/LF inside DCS by default (including sixel) or OSC if requested (like for iTerm).
-                if (!
-                    (mEscapeState == ESC_DCS ||
-                    ((mEscapeState == ESC_OSC || mEscapeState == ESC_OSC__ESC) && mIgnoreCrLfForOsc))) {
-                    doLinefeed();
-                }
+                if (mEscapeState != ESC_DCS) doLinefeed();
                 break;
             case 13: // Carriage return (CR, \r).
-                if (!
-                    (mEscapeState == ESC_DCS ||
-                    ((mEscapeState == ESC_OSC || mEscapeState == ESC_OSC__ESC) && mIgnoreCrLfForOsc))) {
-                    setCursorCol(mLeftMargin);
-                }
+                if (mEscapeState != ESC_DCS) setCursorCol(mLeftMargin);
                 break;
             case 14: // Shift Out (Ctrl-N, SO) → Switch to Alternate Character Set. This invokes the G1 character set.
                 mUseLineDrawingUsesG0 = false;
@@ -857,11 +772,8 @@ public final class TerminalEmulator {
                     // XXX: Ignore escape when reading device control sequence, since it may be part of string terminator.
                     ESC_DCS__ESC = true;
                     return;
-                } else if (mEscapeState != ESC_OSC) {
-                    startEscapeSequence();
-                } else {
-                    receiveOsc(b);
                 }
+                startEscapeSequence();
                 break;
             default:
                 mContinueSequence = false;
@@ -1059,12 +971,6 @@ public final class TerminalEmulator {
                         break;
                     case ESC_PERCENT:
                         break;
-                    case ESC_OSC:
-                        receiveOsc(b);
-                        break;
-                    case ESC_OSC__ESC:
-                        receiveOscEsc(b);
-                        break;
                     case ESC_DCS:
                         doDcs(b);
                         break;
@@ -1153,7 +1059,7 @@ public final class TerminalEmulator {
             // command, then it is added to buffer in code below and more input is waited for as
             // further arguments need to be received for its command before it can be processed,
             // which is not until the next command is received.
-            // We wait till at least `mTerminalControlArgsMaxLength / 2` commands string has
+            // We wait till at least `TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2` commands string has
             // been received. The divide by 2 is done since if near the max length, a new command
             // starts and it does not end before the max length, then `Terminal control args overflow
             // error would occur.
@@ -1164,7 +1070,7 @@ public final class TerminalEmulator {
             // `mTerminalControlArgs.length() > 1` is done so that loop does not engage on first
             // character after `q` and only after first command has been fully received.
             (ESC_DCS__SIXEL && ((b == '#' || b == '!' || b == '"') &&
-                ((mTerminalControlArgs.length() >= (mTerminalControlArgsMaxLength / 2)) || (mTerminalControlArgs.length() > 1 && mSixelCommandPartNum == 1))))
+                ((mTerminalControlArgs.length() >= (TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2)) || (mTerminalControlArgs.length() > 1 && mSixelCommandPartNum == 1))))
         ) {
                 String dcs = mTerminalControlArgs.toString();
 
@@ -1631,9 +1537,9 @@ public final class TerminalEmulator {
                         // 2% extra for sixel commands/parameters in addition to image data.
                         int sixelArgsExpectedLength = (int) (sixelWidth * sixelHeight * 1.02);
                         // If sixel commands are too long, they are divided into parts, and if a
-                        // new command starts near `mTerminalControlArgsMaxLength / 2`, it could
+                        // new command starts near `TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2`, it could
                         // contain image data for 1 pixel line of image width, so add that.
-                        int sixelArgsPartsExpectedLength = (int) ((((double) mTerminalControlArgsMaxLength / 2) + sixelWidth) * 1.02);
+                        int sixelArgsPartsExpectedLength = (int) ((((double) TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH / 2) + sixelWidth) * 1.02);
                         int sixelArgsExpectedCapacity = Math.min(sixelArgsPartsExpectedLength, sixelArgsExpectedLength);
                         if (sixelArgsExpectedCapacity > SIXEL_ARGS__INITIAL_CAPACITY) {
                             mSixelArgsCapacity = sixelArgsExpectedCapacity;
@@ -2086,7 +1992,7 @@ public final class TerminalEmulator {
                 break;
             case ']': // OSC
                 clearTerminalControlArgs();
-                clearOscTypeVariables();
+                mOscCommand = -1;
                 continueSequence(ESC_OSC);
                 break;
             case '>': // DECKPNM
@@ -2633,144 +2539,87 @@ public final class TerminalEmulator {
 
 
 
-    /**
-     * Receive {@link #ESC_OSC}. Check its docs for more info.
-     */
-    private void receiveOsc(final int b) {
-        switch (b) {
-            case 7: // Bell.
-                doOsc("\007");
-                clearOscTypeVariables();
-                break;
-            case 27: // Escape.
-                continueSequence(ESC_OSC__ESC);
-                break;
-            default:
-                if (!collectTerminalControlArgs(b)) return;
-                if (mOscType == -1) {
-                    setOscTypeVariables();
-                }
-                break;
-        }
-    }
-
-    /**
-     * Receive {@link #ESC_OSC__ESC}. Check its docs for more info.
-     */
-    private void receiveOscEsc(final int b) {
-        switch (b) {
-            case '\\':
-                doOsc("\033\\");
-                clearOscTypeVariables();
-                break;
-            default:
-                // The ESC character was not followed by a \, so insert the ESC and
-                // the current character in arg buffer.
-                if (!collectTerminalControlArgs(27)) return;
-                if (!collectTerminalControlArgs(b)) return;
-                continueSequence(ESC_OSC);
-                break;
-        }
-    }
-
-    /**
-     * Set {@link #ESC_OSC} type variables.
-     */
-    void setOscTypeVariables() {
-        if (mOscType >= 0) return;
-        if (mTerminalControlArgs.indexOf(":") < 0) return;
-
-        int value = -1;
-        int argsLength = mTerminalControlArgs.length();
-
-        // Extract initial $value from initial "$value;..." string.
-        for (int i = 0; i < argsLength; i++) {
-            char b = mTerminalControlArgs.charAt(i);
-            if (b == ';') {
-                mOscType = value;
-                break;
-            } else if (b >= '0' && b <= '9') {
-                value = ((value < 0) ? 0 : value * 10) + (b - '0');
+    private void receiveOsc(int b) {
+        if (mEscapeState == ESC_OSC__ESC) {
+            if (b == '\\') {
+                finishOsc("\033\\");
             } else {
-                mOscType = -2; // Unknown sequence.
+                // An ESC that does not form ST starts a new sequence.
+                finishOsc(null);
+                startEscapeSequence();
+                processCodePoint(b);
+            }
+            return;
+        }
+
+        switch (b) {
+            case 7: // BEL
+                finishOsc("\007");
                 return;
-            }
+            case 24: // CAN
+            case 26: // SUB
+                finishOsc(null);
+                return;
+            case 27: // ESC, possibly followed by ST
+                mEscapeState = ESC_OSC__ESC;
+                return;
         }
 
-        if (mOscType >= 0) {
-            Integer terminalControlArgsCapacity = null;
-            Integer terminalControlArgsMaxLength = null;
-            switch (mOscType) {
-                case 52:
-                    // Android has a `~100KB` limit for sharing/sending `UTF-16` encoded `String`
-                    // with binder tranasactions, including clipboard, otherwise can result in a
-                    // `TransactionTooLargeException`.
-                    // - https://www.reddit.com/r/tasker/comments/prro8t/autoshare_crashed_when_i_pasted_the_file_path/
-                    terminalControlArgsMaxLength = (100 * 1024)  +
-                        /* `52;Pc;` */ 10;
-                    break;
-                case 1337: // iTerm image command sends the base64 encoded image, do not run complex logic for each byte.
-                    mIsFastPathOsc = true;
-                    mIgnoreCrLfForOsc = true;
-                    // Expect large amount of data for image bytes.
-                    // `imgcat` utility splits image bytes into 200-byte chunks when sending with `FilePart=` commands.
-                    // - https://github.com/gnachman/iTerm2-shell-integration/blob/d1d4012068c3c6761d5676c28ed73e0e2df2b715/utilities/imgcat#L89
-                    // > Older versions of tmux have a limit of 256 bytes for the entire sequence.
-                    // - https://iterm2.com/documentation-images.html
-                    terminalControlArgsCapacity = 256;
-                    terminalControlArgsMaxLength = TerminalBitmap.MAX_BITMAP_SIZE +
-                        /* `1337;File=inline=1;size=209715200;name=xxxxxxxxxxxxxxxxxxxxxxxx;width=8192px;height=8192px;preserveAspectRatio=1:` */ 150;
-                    break;
-            }
-
-            if (terminalControlArgsCapacity != null) {
-                ensureTerminalControlArgsCapacity(terminalControlArgsCapacity);
-            }
-
-            if (terminalControlArgsMaxLength != null) {
-                setTerminalControlArgsMaxLength(terminalControlArgsMaxLength);
-            }
-        }
-    }
-
-    /**
-     * Clear {@link #ESC_OSC} type variables.
-     */
-    public void clearOscTypeVariables() {
-        mOscType = -1;
-        mIsFastPathOsc = false;
-        mIgnoreCrLfForOsc = false;
-    }
-
-    /**
-     * Do {@link #ESC_OSC}. Check its docs for more info.
-     *
-     * This handles Set Text Parameters commands.
-     *
-     * The `bellOrStringTerminator` defines whether `OSC` command terminated with a `BEL` or `ST`.
-     */
-    private void doOsc(String bellOrStringTerminator) {
-        int value = -1;
-        String textParameter = "";
-        int argsLength = mTerminalControlArgs.length();
-
-        // Extract initial $value from initial "$value;..." string.
-        for (int i = 0; i < argsLength; i++) {
-            char b = mTerminalControlArgs.charAt(i);
-            if (b == ';') {
-                // Do not make a copy of `mTerminalControlArgs` for lengthy commands.
-                if (value != 1337) {
-                    textParameter = mTerminalControlArgs.substring(i + 1);
+        if (b < 32 || b == 127 || mEscapeState == ESC_OSC_DISCARD) return;
+        if (mEscapeState == ESC_OSC) {
+            if (b >= '0' && b <= '9') {
+                int digit = b - '0';
+                int command = Math.max(0, mOscCommand);
+                if (command <= (Integer.MAX_VALUE - digit) / 10) {
+                    mOscCommand = command * 10 + digit;
+                    return;
                 }
-                break;
-            } else if (b >= '0' && b <= '9') {
-                value = ((value < 0) ? 0 : value * 10) + (b - '0');
+            } else if (b == ';') {
+                switch (mOscCommand) {
+                    case 0:
+                    case 1:
+                    case 2:
+                    case 4:
+                    case 10:
+                    case 11:
+                    case 12:
+                    case 52:
+                    case 104:
+                    case 110:
+                    case 111:
+                    case 112:
+                        mEscapeState = ESC_OSC_PARAMETER;
+                        return;
+                }
+            }
+            discardOsc();
+        } else {
+            int limit = mOscCommand == 52 ? OSC_CLIPBOARD_MAX_LENGTH : TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH;
+            if (mTerminalControlArgs.length() + Character.charCount(b) <= limit) {
+                mTerminalControlArgs.appendCodePoint(b);
             } else {
-                unknownSequence(b);
-                return;
+                discardOsc();
             }
         }
+    }
 
+    private void discardOsc() {
+        clearTerminalControlArgs();
+        mOscCommand = -1;
+        mEscapeState = ESC_OSC_DISCARD;
+    }
+
+    private void finishOsc(String terminator) {
+        if (terminator != null && mOscCommand >= 0) {
+            doOsc(mOscCommand, mTerminalControlArgs.toString(), terminator);
+        }
+        clearTerminalControlArgs();
+        mOscCommand = -1;
+        finishSequence();
+    }
+
+    /** Apply a supported OSC after its string terminator. */
+    private void doOsc(int value, String textParameter, String bellOrStringTerminator) {
         switch (value) {
             case 0: // Change icon name and window title to T.
             case 1: // Change icon name to T.
@@ -2889,129 +2738,9 @@ public final class TerminalEmulator {
                 mColors.reset(TextStyle.COLOR_INDEX_FOREGROUND + (value - 110));
                 mSession.onColorsChanged();
                 break;
-            case 119: // Reset highlight color.
-                break;
-            case 1337: // iTerm image
-                // - https://iterm2.com/documentation-images.html
-                // - https://iterm2.com/documentation-escape-codes.html
-                String controlCommandPrefix = mTerminalControlArgs.substring(5, Math.min(19, argsLength));
-
-                if (controlCommandPrefix.startsWith("File=") ||
-                    controlCommandPrefix.startsWith("MultipartFile=") ||
-                    controlCommandPrefix.startsWith("FilePart=") ||
-                    controlCommandPrefix.equals("FileEnd")) {
-
-                    ITermImage iTermImage = null;
-                    boolean oscArgsCleared = false;
-                    int index;
-                    // `File = [optional arguments] : base-64 encoded file contents ^G`
-                    if (controlCommandPrefix.startsWith("File=")) {
-                        if (mITermImage != null) {
-                            Logger.logWarn(mClient, LOG_TAG, "A new iTerm 'File' command received while already processing a 'MultipartFile' command");
-                            mITermImage = null; // Unset old image.
-                        }
-
-                        iTermImage = new ITermImage(mClient, /* multiPart */ false);
-                        if ((index = iTermImage.readArguments(this, mTerminalControlArgs, /* `1337;File=` */ 10)) < 10 ||
-                            !iTermImage.readImage(mTerminalControlArgs, index)) {
-                            iTermImage = null;
-                        } else {
-                            // Free image data from memory held in osc command arguments as it is no longer needed.
-                            clearTerminalControlArgs();
-                            oscArgsCleared = true;
-                            if (!iTermImage.decodeImage()) {
-                                iTermImage = null;
-                            }
-                        }
-                    }
-                    // `MultipartFile = [optional arguments] ^G`
-                    else if (controlCommandPrefix.startsWith("MultipartFile=")) {
-                        if (mITermImage != null) {
-                            Logger.logWarn(mClient, LOG_TAG, "A new iTerm 'MultipartFile' command received while already processing a 'MultipartFile' command");
-                            mITermImage = null; // Unset old image.
-                        }
-
-                        iTermImage = new ITermImage(mClient, /* multiPart */ true);
-                        if (iTermImage.readArguments(this, mTerminalControlArgs, /* `1337;MultipartFile=` */ 19) < 19) {
-                            iTermImage = null;
-                        } else {
-                            mITermImage = iTermImage;
-                        }
-                    }
-                    // `FilePart = base64 encoded file contents ^G`
-                    else if (controlCommandPrefix.startsWith("FilePart=")) {
-                        if (mITermImage == null) {
-                            Logger.logError(mClient, LOG_TAG, "An iTerm 'FilePart' command received without a 'MultipartFile' command preceding it");
-                            return;
-                        }
-
-                        if (!mITermImage.readImage(mTerminalControlArgs, /* `1337;FilePart=` */ 14)) {
-                            mITermImage = null;
-                        }
-                    }
-                    // `FileEnd ^G`
-                    else if (controlCommandPrefix.equals("FileEnd")) {
-                        if (mITermImage == null) {
-                            Logger.logError(mClient, LOG_TAG, "An iTerm 'FileEnd' command received without a 'MultipartFile' command preceding it");
-                            return;
-                        }
-
-                        iTermImage = mITermImage;
-                        mITermImage = null; // Free global reference so that memory is freed at end function.
-                        if (
-                            !iTermImage.setMultiPartImageRead() ||
-                            !iTermImage.decodeImage()) {
-                            iTermImage = null;
-                        }
-                    }
-
-                    // Free image data from memory held in osc command arguments as it is no longer needed.
-                    if (!oscArgsCleared)
-                        clearTerminalControlArgs();
-
-                    if (iTermImage != null && iTermImage.isImageDecoded()) {
-                        // Display image as inline in Terminal.
-                        if (iTermImage.isInline()) {
-                            int[] cursorDelta = mScreen.addTerminalBitmapForImage(iTermImage.getDecodedImage(),
-                                mCursorCol, mCursorRow, mCellWidthPixels, mCellHeightPixels,
-                                iTermImage.getWidth(), iTermImage.getHeight(),
-                                iTermImage.shouldPreserveAspectRatio());
-
-                            int col = cursorDelta[1] + mCursorCol;
-                            if (col < mColumns - 1) {
-                                cursorDelta[0] -= 1;
-                            } else {
-                                col = 0;
-                            }
-                            for (; cursorDelta[0] > 0; cursorDelta[0]--) {
-                                doLinefeed();
-                            }
-                            mCursorCol = col;
-                        }
-                        // Saving files in downloads folder is not supported currently.
-                        else {}
-                    }
-                    break;
-                } else if (controlCommandPrefix.startsWith("ReportCellSize")) {
-                    mSession.write(String.format(Locale.ENGLISH, "\0331337;ReportCellSize=%d;%d\007", mCellHeightPixels, mCellWidthPixels));
-                }
-
-                // Free image from memory for any non `MultipartFile=` related commands.
-                mITermImage = null;
             default:
-                unknownParameter(value);
                 break;
         }
-
-        // Free image from memory if an incomplete `MultipartFile` command was received without a `FileEnd`.
-        // The `mITermImage` cannot set to `null` in `clearOscTypeVariables()` as sequential
-        // OSC commands will be received for `MultipartFile` commands, and the variable is required
-        // to be set until the final `FileEnd` command is received.
-        if (mITermImage != null && value != 1337) {
-            mITermImage = null;
-        }
-
-        finishSequence();
     }
 
     private void blockClear(int sx, int sy, int w) {
@@ -3147,7 +2876,7 @@ public final class TerminalEmulator {
     private boolean collectTerminalControlArgs(int b) {
         // FIXME: Use `Logger.logErrorDebug()` and elsewhere in terminal code when support is added
         //  to prevent logging potentially private data to logcat unless user has increased log level.
-        if (mTerminalControlArgs.length() < mTerminalControlArgsMaxLength) {
+        if (mTerminalControlArgs.length() < TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH) {
             try {
                 // Appending can cause an increase in capacity and cause an OOM.
                 mTerminalControlArgs.appendCodePoint(b);
@@ -3162,7 +2891,7 @@ public final class TerminalEmulator {
             }
         } else {
             Logger.logError(mClient, LOG_TAG, "Terminal control args input will" +
-                " overflow max args length " + mTerminalControlArgsMaxLength + " for" +
+                " overflow max args length " + TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH + " for" +
                 " char '" + (char) b + "' (numeric value=" + b + ") and" +
                 " args string '" + mTerminalControlArgs.substring(0, Math.min(100, mTerminalControlArgs.length())) + "...' with length " + mTerminalControlArgs.length());
         }
@@ -3174,8 +2903,6 @@ public final class TerminalEmulator {
 
     /** Clear {@link #mTerminalControlArgs}. */
     private void clearTerminalControlArgs() {
-        mTerminalControlArgsMaxLength = TERMINAL_CONTROL_ARGS__DEFAULT_MAX_LENGTH;
-
         if (mTerminalControlArgs.capacity() <= TERMINAL_CONTROL_ARGS__INITIAL_CAPACITY) {
             // Mark existing buffer as empty and reuse old array already allocated in
             // `StringBuffer` for future commands if required.
@@ -3213,21 +2940,6 @@ public final class TerminalEmulator {
     private void ensureTerminalControlArgsCapacity(int capacity) {
         mTerminalControlArgs.ensureCapacity(capacity);
     }
-
-    /**
-     * Set {@link #mTerminalControlArgsMaxLength} in case a command expects a larger input.
-     *
-     * @param length The new max length.
-     */
-    private void setTerminalControlArgsMaxLength(int length) {
-        if (length > 0) {
-            mTerminalControlArgsMaxLength = length;
-        }
-    }
-
-
-
-
 
     private void unimplementedSequence(int b) {
         logError("Unimplemented sequence char '" + (char) b + "' (U+" + String.format("%04x", b) + ")");
@@ -3515,8 +3227,7 @@ public final class TerminalEmulator {
         mSession.onColorsChanged();
 
         clearTerminalControlArgs();
-        clearOscTypeVariables();
-        mITermImage = null;
+        mOscCommand = -1;
     }
 
     public String getSelectedText(int x1, int y1, int x2, int y2) {

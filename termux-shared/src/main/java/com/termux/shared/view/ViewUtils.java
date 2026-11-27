@@ -2,7 +2,6 @@ package com.termux.shared.view;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -10,6 +9,7 @@ import android.os.Build;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -32,22 +32,6 @@ public class ViewUtils {
      */
     public static void setIsViewUtilsLoggingEnabled(boolean value) {
         VIEW_UTILS_LOGGING_ENABLED = value;
-    }
-
-    /**
-     * Check if a {@link View} is fully visible and not hidden or partially covered by another view.
-     *
-     * https://stackoverflow.com/a/51078418/14686958
-     *
-     * @param view The {@link View} to check.
-     * @param statusBarHeight The status bar height received by {@link View.OnApplyWindowInsetsListener}.
-     * @return Returns {@code true} if view is fully visible.
-     */
-    public static boolean isViewFullyVisible(View view, int statusBarHeight) {
-        Rect[] windowAndViewRects = getWindowAndViewRects(view, statusBarHeight);
-        if (windowAndViewRects == null)
-            return false;
-        return windowAndViewRects[0].contains(windowAndViewRects[1]);
     }
 
     /**
@@ -81,11 +65,11 @@ public class ViewUtils {
         if (context instanceof AppCompatActivity) {
             ActionBar actionBar = ((AppCompatActivity) context).getSupportActionBar();
             if (actionBar != null) actionBarHeight = actionBar.getHeight();
-            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) && ((AppCompatActivity) context).isInMultiWindowMode();
+            isInMultiWindowMode = ((AppCompatActivity) context).isInMultiWindowMode();
         } else if (context instanceof Activity) {
             android.app.ActionBar actionBar = ((Activity) context).getActionBar();
             if (actionBar != null) actionBarHeight = actionBar.getHeight();
-            isInMultiWindowMode = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) && ((Activity) context).isInMultiWindowMode();
+            isInMultiWindowMode = ((Activity) context).isInMultiWindowMode();
         }
 
         int displayOrientation = getDisplayOrientation(context);
@@ -167,30 +151,23 @@ public class ViewUtils {
      * @param context The {@link Context} to check with.
      * @return {@link Configuration#ORIENTATION_PORTRAIT} or {@link Configuration#ORIENTATION_LANDSCAPE}.
      */
-    public static int getDisplayOrientation(@NonNull Context context) {
+    private static int getDisplayOrientation(@NonNull Context context) {
         Point size = getDisplaySize(context, false);
         return (size.x < size.y) ? Configuration.ORIENTATION_PORTRAIT : Configuration.ORIENTATION_LANDSCAPE;
     }
 
-    /**
-     * Get device display size.
-     *
-     * @param context The {@link Context} to check with. It must be {@link Activity} context, otherwise
-     *                android will throw:
-     *                `java.lang.IllegalArgumentException: Used non-visual Context to obtain an instance of WindowManager. Please use an Activity or a ContextWrapper around one instead.`
-     * @param activitySize The set to {@link true}, then size returned will be that of the activity
-     *                     and can be smaller than physical display size in multi-window mode.
-     * @return Returns the display size as {@link Point}.
-     */
-    public static Point getDisplaySize( @NonNull Context context, boolean activitySize) {
-        // android.view.WindowManager.getDefaultDisplay() and Display.getSize() are deprecated in
-        // API 30 and give wrong values in API 30 for activitySize=false in multi-window
-        androidx.window.layout.WindowMetrics windowMetrics;
-        if (activitySize)
-            windowMetrics = androidx.window.layout.WindowMetricsCalculator.getOrCreate().computeCurrentWindowMetrics(context);
-        else
-            windowMetrics = androidx.window.layout.WindowMetricsCalculator.getOrCreate().computeMaximumWindowMetrics(context);
-        return new Point(windowMetrics.getBounds().width(), windowMetrics.getBounds().height());
+    private static Point getDisplaySize(Context context, boolean activitySize) {
+        WindowManager windows = context.getSystemService(WindowManager.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Rect bounds = activitySize ? windows.getCurrentWindowMetrics().getBounds() :
+                windows.getMaximumWindowMetrics().getBounds();
+            return new Point(bounds.width(), bounds.height());
+        }
+
+        Point size = new Point();
+        if (activitySize) windows.getDefaultDisplay().getSize(size);
+        else windows.getDefaultDisplay().getRealSize(size);
+        return size;
     }
 
     /** Convert {@link Rect} to {@link String}. */
@@ -200,34 +177,15 @@ public class ViewUtils {
     }
 
     /** Convert {@link Point} to {@link String}. */
-    public static String toPointString(Point point) {
+    private static String toPointString(Point point) {
         if (point == null) return "null";
         return "(" + point.x + "," + point.y + ")";
     }
 
-    /** Get the {@link Activity} associated with the {@link Context} if available. */
-    @Nullable
-    public static Activity getActivity(Context context) {
-        while (context instanceof ContextWrapper) {
-            if (context instanceof Activity) {
-                return (Activity)context;
-            }
-            context = ((ContextWrapper)context).getBaseContext();
-        }
-        return null;
-    }
-
-
     /** Convert value in device independent pixels (dp) to pixels (px) units. */
-    public static float dpToPx(Context context, float dp) {
+    private static float dpToPx(Context context, float dp) {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, context.getResources().getDisplayMetrics());
     }
-
-    /** Convert value in pixels (px) to device independent pixels (dp) units. */
-    public static float pxToDp(Context context, float px) {
-        return px / context.getResources().getDisplayMetrics().density;
-    }
-
 
     public static void setLayoutMarginsInDp(@NonNull View view, int left, int top, int right, int bottom) {
         Context context = view.getContext();
@@ -235,7 +193,7 @@ public class ViewUtils {
             (int) dpToPx(context, right), (int) dpToPx(context, bottom));
     }
 
-    public static void setLayoutMarginsInPixels(@NonNull View view, int left, int top, int right, int bottom) {
+    private static void setLayoutMarginsInPixels(@NonNull View view, int left, int top, int right, int bottom) {
         if (view.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
             params.setMargins(left, top, right, bottom);

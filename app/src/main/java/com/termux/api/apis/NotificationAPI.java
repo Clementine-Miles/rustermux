@@ -22,20 +22,16 @@ import androidx.core.app.RemoteInput;
 import androidx.core.content.ContextCompat;
 import androidx.core.util.Pair;
 
-import com.termux.R;
 import com.termux.api.TermuxAPIConstants;
 import com.termux.api.TermuxApiReceiver;
 import com.termux.api.util.PendingIntentUtils;
-import com.termux.api.util.PluginUtils;
 import com.termux.api.util.ResultReturner;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxConstants.TERMUX_APP.TERMUX_SERVICE;
 
 import java.io.File;
 import java.io.PrintWriter;
-import java.lang.reflect.Field;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -216,9 +212,10 @@ public class NotificationAPI {
         if (channel == null) {
             channel = CHANNEL_ID;
         }
+        String smallIconName = intent.getStringExtra("icon");
         final NotificationCompat.Builder notification = new NotificationCompat.Builder(context,
                 getPlatformChannelId(channel));
-        notification.setSmallIcon(R.drawable.ic_event_note_black_24dp);
+        notification.setSmallIcon(NotificationIcons.resolve(smallIconName));
         notification.setColor(0xFF000000);
         notification.setContentTitle(title);
         notification.setPriority(priority);
@@ -226,32 +223,6 @@ public class NotificationAPI {
         notification.setOnlyAlertOnce(alertOnce);
         notification.setWhen(System.currentTimeMillis());
         notification.setShowWhen(true);
-
-
-        String smallIconName = intent.getStringExtra("icon");
-        if (smallIconName != null) {
-            // TODO: Add prefix to all icons used by `NotificationAPI` to force keep only those icons when providing termux-api-app as a library.
-            // TODO: Add new icons from https://fonts.google.com/icons | https://github.com/google/material-design-icons
-            // Use `String.format()` so that resource shrinker does not remove icons used by `NotificationAPI` for release builds.
-            // - https://web.archive.org/web/20250516083801/https://developer.android.com/build/shrink-code#keep-resources
-            String smallIconResourceName = String.format("ic_%1s_black_24dp", smallIconName);
-            Integer smallIconResourceId = null;
-            try {
-                //noinspection DiscouragedApi
-                smallIconResourceId = context.getResources().getIdentifier(smallIconResourceName, "drawable", context.getPackageName());
-                if (smallIconResourceId == 0) {
-                    smallIconResourceId = null;
-                    Logger.logError(LOG_TAG, "Failed to find \"" + smallIconResourceName + "\" icon");
-                }
-            } catch (Exception e) {
-                Logger.logError(LOG_TAG, "Failed to find \"" + smallIconResourceName + "\" icon: " + e.getMessage());
-            }
-
-            if (smallIconResourceId != null) {
-                notification.setSmallIcon(smallIconResourceId);
-            }
-        }
-
 
         String imagePath = intent.getStringExtra("image-path");
         if (imagePath != null) {
@@ -387,7 +358,7 @@ public class NotificationAPI {
                         PendingIntent.FLAG_UPDATE_CURRENT | PendingIntentUtils.getPendingIntentMutableFlag());
 
         // Create the reply action and add the remote input.
-        return new NotificationCompat.Action.Builder(R.drawable.ic_event_note_black_24dp,
+        return new NotificationCompat.Action.Builder(NotificationIcons.DEFAULT,
                         buttonText,
                         replyPendingIntent)
                         .addRemoteInput(remoteInput)
@@ -459,17 +430,11 @@ public class NotificationAPI {
     }
 
     static Intent createExecuteIntent(String[] arguments) {
-        ExecutionCommand executionCommand = new ExecutionCommand();
-        executionCommand.executableUri = new Uri.Builder().scheme(TERMUX_SERVICE.URI_SCHEME_SERVICE_EXECUTE).path(BIN_SH).build();
-        executionCommand.arguments = arguments;
-        executionCommand.runner = ExecutionCommand.Runner.APP_SHELL.getName();
-
-        // Create execution intent with the action TERMUX_SERVICE#ACTION_SERVICE_EXECUTE to be sent to the TERMUX_SERVICE
-        Intent executionIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE, executionCommand.executableUri);
+        Uri script = new Uri.Builder().scheme(TERMUX_SERVICE.URI_SCHEME_SERVICE_EXECUTE).path(BIN_SH).build();
+        Intent executionIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE, script);
         executionIntent.setClassName(TermuxConstants.TERMUX_PACKAGE_NAME, TermuxConstants.TERMUX_APP.TERMUX_SERVICE_NAME);
-        executionIntent.putExtra(TERMUX_SERVICE.EXTRA_ARGUMENTS, executionCommand.arguments);
-        executionIntent.putExtra(TERMUX_SERVICE.EXTRA_RUNNER, executionCommand.runner);
-        executionIntent.putExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, true); // Also pass in case user using termux-app version < 0.119.0
+        executionIntent.putExtra(TERMUX_SERVICE.EXTRA_ARGUMENTS, arguments);
+        executionIntent.putExtra(TERMUX_SERVICE.EXTRA_BACKGROUND, true);
         return executionIntent;
     }
 
@@ -482,7 +447,7 @@ public class NotificationAPI {
         // Use unique request code for each action created so that pending intent extras are updated
         // and do not conflict when same action is recreated or between actions of different notifications.
         return PendingIntent.getService(context,
-                PluginUtils.getLastPendingIntentRequestCode(context), executeIntent,
-                PendingIntentUtils.getPendingIntentImmutableFlag());
+                PendingIntentUtils.getNextRequestCode(context), executeIntent,
+                PendingIntent.FLAG_IMMUTABLE);
     }
 }

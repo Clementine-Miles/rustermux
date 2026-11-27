@@ -6,12 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.os.Build;
 import android.os.IBinder;
 
-import androidx.annotation.RequiresApi;
 
-import com.termux.api.TermuxAPIConstants;
 import com.termux.api.util.ResultReturner;
 import com.termux.shared.logger.Logger;
 
@@ -54,12 +51,6 @@ public class WallpaperAPI {
                 stopSelf(startId);
                 return Service.START_NOT_STICKY;
             }
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                ResultReturner.returnError(this, intent, TermuxAPIConstants.UNSUPPORTED_ANDROID_VERSION);
-                stopSelf(startId);
-                return Service.START_NOT_STICKY;
-            }
-
             if (intent.hasExtra("file")) {
                 getWallpaperFromFile(intent);
             } else if (intent.hasExtra("url")) {
@@ -73,7 +64,6 @@ public class WallpaperAPI {
             return Service.START_NOT_STICKY;
         }
 
-        @RequiresApi(Build.VERSION_CODES.N)
         protected void getWallpaperFromFile(final Intent intent) {
             WallpaperResult wallpaperResult = new WallpaperResult();
             String file = intent.getStringExtra("file");
@@ -84,7 +74,6 @@ public class WallpaperAPI {
             onWallpaperResult(intent, wallpaperResult);
         }
 
-        @RequiresApi(Build.VERSION_CODES.N)
         protected void getWallpaperFromUrl(final Intent intent) {
             final String url = intent.getStringExtra("url");
             Future<WallpaperResult> wallpaperDownload = getWallpaperDownloader(url);
@@ -132,7 +121,6 @@ public class WallpaperAPI {
             });
         }
 
-        @RequiresApi(Build.VERSION_CODES.N)
         protected void onWallpaperResult(final Intent intent, WallpaperResult result) {
             Context context = getApplicationContext();
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(context);

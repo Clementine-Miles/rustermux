@@ -3,7 +3,6 @@ package com.termux.view.textselection;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Rect;
-import android.os.Build;
 import android.text.TextUtils;
 import android.view.ActionMode;
 import android.view.Menu;
@@ -108,7 +107,7 @@ public class TextSelectionCursorController implements CursorController {
     }
     
     public void setActionModeCallBacks() {
-        final ActionMode.Callback callback = new ActionMode.Callback() {
+        mActionMode = terminalView.startActionMode(new ActionMode.Callback2() {
             @Override
             public boolean onCreateActionMode(ActionMode mode, Menu menu) {
                 int show = MenuItem.SHOW_AS_ACTION_IF_ROOM | MenuItem.SHOW_AS_ACTION_WITH_TEXT;
@@ -158,37 +157,7 @@ public class TextSelectionCursorController implements CursorController {
             }
 
             @Override
-            public void onDestroyActionMode(ActionMode mode) {
-            }
-
-        };
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            mActionMode = terminalView.startActionMode(callback);
-            return;
-        }
-
-        //noinspection NewApi
-        mActionMode = terminalView.startActionMode(new ActionMode.Callback2() {
-            @Override
-            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-                return callback.onCreateActionMode(mode, menu);
-            }
-
-            @Override
-            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
-                return false;
-            }
-
-            @Override
-            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
-                return callback.onActionItemClicked(mode, item);
-            }
-
-            @Override
-            public void onDestroyActionMode(ActionMode mode) {
-                // Ignore.
-            }
+            public void onDestroyActionMode(ActionMode mode) {}
 
             @Override
             public void onGetContentRect(ActionMode mode, View view, Rect outRect) {

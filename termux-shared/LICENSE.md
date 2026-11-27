@@ -19,4 +19,5 @@ The `GPLv3 only` license applies to all files unless specifically specified by a
 #### [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 - [`src/main/java/com/termux/shared/shell/StreamGobbler.java`](src/main/java/com/termux/shared/shell/StreamGobbler.java) uses code from [libsuperuser ](https://github.com/Chainfire/libsuperuser).
+- [`src/main/java/com/termux/am`](src/main/java/com/termux/am) contains Java sources from [Termux AM Library v2.0.0](https://github.com/termux/termux-am-library/tree/d979ee308d52c59c6265ed9d9e254c97702ee4fb). Its [Apache license](src/main/resources/META-INF/LICENSE-termux-am.txt) is included in the application.
 ##

@@ -1,21 +1,20 @@
 package com.termux.shared.termux.settings.preferences;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.TypedValue;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
-import com.termux.shared.android.PackageUtils;
-import com.termux.shared.settings.preferences.AppSharedPreferences;
 import com.termux.shared.settings.preferences.SharedPreferenceUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.data.DataUtils;
-import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
-public class TermuxAppSharedPreferences extends AppSharedPreferences {
+public class TermuxAppSharedPreferences {
+
+    private final SharedPreferences mSharedPreferences;
 
     private int MIN_FONTSIZE;
     private int MAX_FONTSIZE;
@@ -24,49 +23,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private static final String LOG_TAG = "TermuxAppSharedPreferences";
 
     private TermuxAppSharedPreferences(@NonNull Context context) {
-        super(context,
-            SharedPreferenceUtils.getPrivateSharedPreferences(context,
-                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION),
-            SharedPreferenceUtils.getPrivateAndMultiProcessSharedPreferences(context,
-                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION));
-
+        mSharedPreferences = SharedPreferenceUtils.getPrivateSharedPreferences(context,
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION);
         setFontVariables(context);
     }
 
-    /**
-     * Get {@link TermuxAppSharedPreferences}.
-     *
-     * @param context The {@link Context} to use to get the {@link Context} of the
-     *                {@link TermuxConstants#TERMUX_PACKAGE_NAME}.
-     * @return Returns the {@link TermuxAppSharedPreferences}. This will {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static TermuxAppSharedPreferences build(@NonNull final Context context) {
-        Context termuxPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_PACKAGE_NAME);
-        if (termuxPackageContext == null)
-            return null;
-        else
-            return new TermuxAppSharedPreferences(termuxPackageContext);
+    public static TermuxAppSharedPreferences build(@NonNull Context context) {
+        return new TermuxAppSharedPreferences(context);
     }
 
-    /**
-     * Get {@link TermuxAppSharedPreferences}.
-     *
-     * @param context The {@link Context} to use to get the {@link Context} of the
-     *                {@link TermuxConstants#TERMUX_PACKAGE_NAME}.
-     * @param exitAppOnError If {@code true} and failed to get package context, then a dialog will
-     *                       be shown which when dismissed will exit the app.
-     * @return Returns the {@link TermuxAppSharedPreferences}. This will {@code null} if an exception is raised.
-     */
-    public static TermuxAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
-        Context termuxPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError);
-        if (termuxPackageContext == null)
-            return null;
-        else
-            return new TermuxAppSharedPreferences(termuxPackageContext);
+    public SharedPreferences getSharedPreferences() {
+        return mSharedPreferences;
     }
-
-
 
     public boolean shouldShowTerminalToolbar() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_TERMINAL_TOOLBAR, TERMUX_APP.DEFAULT_VALUE_SHOW_TERMINAL_TOOLBAR);
@@ -74,12 +42,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setShowTerminalToolbar(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SHOW_TERMINAL_TOOLBAR, value, false);
-    }
-
-    public boolean toogleShowTerminalToolbar() {
-        boolean currentValue = shouldShowTerminalToolbar();
-        setShowTerminalToolbar(!currentValue);
-        return !currentValue;
     }
 
 
@@ -234,24 +196,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
 
 
-    public boolean arePluginErrorNotificationsEnabled(boolean readFromFile) {
-        if (readFromFile)
-            return SharedPreferenceUtils.getBoolean(mMultiProcessSharedPreferences, TERMUX_APP.KEY_PLUGIN_ERROR_NOTIFICATIONS_ENABLED, TERMUX_APP.DEFAULT_VALUE_PLUGIN_ERROR_NOTIFICATIONS_ENABLED);
-        else
-            return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_PLUGIN_ERROR_NOTIFICATIONS_ENABLED, TERMUX_APP.DEFAULT_VALUE_PLUGIN_ERROR_NOTIFICATIONS_ENABLED);
-    }
-
-    public void setPluginErrorNotificationsEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_PLUGIN_ERROR_NOTIFICATIONS_ENABLED, value, false);
-    }
-
-
-
-    public boolean areCrashReportNotificationsEnabled(boolean readFromFile) {
-        if (readFromFile)
-            return SharedPreferenceUtils.getBoolean(mMultiProcessSharedPreferences, TERMUX_APP.KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED, TERMUX_APP.DEFAULT_VALUE_CRASH_REPORT_NOTIFICATIONS_ENABLED);
-       else
-            return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED, TERMUX_APP.DEFAULT_VALUE_CRASH_REPORT_NOTIFICATIONS_ENABLED);
+    public boolean areCrashReportNotificationsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED,
+            TERMUX_APP.DEFAULT_VALUE_CRASH_REPORT_NOTIFICATIONS_ENABLED);
     }
 
     public void setCrashReportNotificationsEnabled(boolean value) {

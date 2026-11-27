@@ -103,7 +103,7 @@ widget_usage () {
             echo "    $OPT_TITLE_DESC"
             ;;
         "sheet")
-            echo "Pick a value from sliding bottom sheet"
+            echo "Pick a value from a list"
             echo "    $OPT_VALUES_DESC"
             echo "    $OPT_TITLE_DESC"
             ;;

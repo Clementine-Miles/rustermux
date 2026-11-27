@@ -249,9 +249,7 @@ public class TelephonyAPI {
 
                     out.name("device_id").value(readDeviceId(manager, phoneType));
                     out.name("device_software_version").value(manager.getDeviceSoftwareVersion());
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        out.name("phone_count").value(manager.getPhoneCount());
-                    }
+                    out.name("phone_count").value(manager.getPhoneCount());
                     String phoneTypeString;
                     switch (phoneType) {
                         case TelephonyManager.PHONE_TYPE_CDMA:

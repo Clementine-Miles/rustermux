@@ -4,8 +4,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -15,6 +13,7 @@ import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.widget.TextView;
 
 import com.termux.shared.R;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
@@ -24,29 +23,13 @@ import com.termux.shared.file.filesystem.FileType;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.errors.Error;
 import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.models.ReportInfo;
 import com.termux.shared.theme.NightMode;
 
-import org.commonmark.node.FencedCodeBlock;
-import org.jetbrains.annotations.NotNull;
 
-import io.noties.markwon.Markwon;
-import io.noties.markwon.recycler.MarkwonAdapter;
-import io.noties.markwon.recycler.SimpleEntry;
 
-/**
- * An activity to show reports in markdown format as per CommonMark spec based on config passed as {@link ReportInfo}.
- * Add Following to `AndroidManifest.xml` to use in an app:
- * {@code `<activity android:name="com.termux.shared.activities.ReportActivity" android:theme="@style/Theme.AppCompat.TermuxReportActivity" android:documentLaunchMode="intoExisting" />` }
- * and
- * {@code `<receiver android:name="com.termux.shared.activities.ReportActivity$ReportActivityBroadcastReceiver"  android:exported="false" />` }
- * Receiver **must not** be `exported="true"`!!!
- *
- * Also make an incremental call to {@link #deleteReportInfoFilesOlderThanXDays(Context, int, boolean)}
- * in the app to cleanup cached files.
- */
+/** Displays a diagnostic report and lets the user share, copy, or save it. */
 public class ReportActivity extends AppCompatActivity {
 
     private static final String CLASS_NAME = ReportActivity.class.getCanonicalName();
@@ -102,7 +85,10 @@ public class ReportActivity extends AppCompatActivity {
         setIntent(intent);
 
         if (intent != null) {
-            deleteReportInfoFile(this, mReportInfoFilePath);
+            String newPath = intent.getStringExtra(EXTRA_REPORT_INFO_OBJECT_FILE_PATH);
+            if (mReportInfoFilePath != null && !mReportInfoFilePath.equals(newPath)) {
+                deleteReportInfoFile(this, mReportInfoFilePath);
+            }
             mBundle = intent.getExtras();
             updateUI();
         }
@@ -147,6 +133,7 @@ public class ReportActivity extends AppCompatActivity {
 
         final ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
+            actionBar.setDisplayHomeAsUpEnabled(true);
             if (mReportInfo.reportTitle != null)
                 actionBar.setTitle(mReportInfo.reportTitle);
             else
@@ -154,26 +141,16 @@ public class ReportActivity extends AppCompatActivity {
         }
 
 
-        RecyclerView recyclerView = findViewById(R.id.recycler_view);
-
-        final Markwon markwon = MarkdownUtils.getRecyclerMarkwonBuilder(this);
-
-        final MarkwonAdapter adapter = MarkwonAdapter.builderTextViewIsRoot(R.layout.markdown_adapter_node_default)
-            .include(FencedCodeBlock.class, SimpleEntry.create(R.layout.markdown_adapter_node_code_block, R.id.code_text_view))
-            .build();
-
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recyclerView.setAdapter(adapter);
-
         generateReportActivityMarkdownString();
-        adapter.setMarkdown(markwon, mReportActivityMarkdownString);
-        adapter.notifyDataSetChanged();
+        TextView report = findViewById(R.id.report_text);
+        report.setText(mReportActivityMarkdownString);
     }
 
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
+        if (mBundle == null) return;
         if (mBundle.containsKey(EXTRA_REPORT_INFO_OBJECT_FILE_PATH)) {
             outState.putString(EXTRA_REPORT_INFO_OBJECT_FILE_PATH, mReportInfoFilePath);
         } else {
@@ -186,11 +163,12 @@ public class ReportActivity extends AppCompatActivity {
         super.onDestroy();
         Logger.logVerbose(LOG_TAG, "onDestroy");
 
-        deleteReportInfoFile(this, mReportInfoFilePath);
+        if (isFinishing()) deleteReportInfoFile(this, mReportInfoFilePath);
     }
 
     @Override
     public boolean onCreateOptionsMenu(final Menu menu) {
+        if (mReportInfo == null) return false;
         final MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.menu_report, menu);
 
@@ -204,15 +182,11 @@ public class ReportActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
-        // Remove activity from recents menu on back button press
-        finishAndRemoveTask();
-    }
-
-    @Override
     public boolean onOptionsItemSelected(final MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.menu_item_share_report) {
+        if (id == android.R.id.home) {
+            finish();
+        } else if (id == R.id.menu_item_share_report) {
             ShareUtils.shareText(this, getString(R.string.title_report_text), ReportInfo.getReportInfoMarkdownString(mReportInfo));
         } else if (id == R.id.menu_item_copy_report) {
             ShareUtils.copyTextToClipboard(this, ReportInfo.getReportInfoMarkdownString(mReportInfo), null);
@@ -220,9 +194,11 @@ public class ReportActivity extends AppCompatActivity {
             ShareUtils.saveTextToFile(this, mReportInfo.reportSaveFileLabel,
                 mReportInfo.reportSaveFilePath, ReportInfo.getReportInfoMarkdownString(mReportInfo),
                 true, REQUEST_GRANT_STORAGE_PERMISSION_FOR_SAVE_FILE);
+        } else {
+            return super.onOptionsItemSelected(item);
         }
 
-        return false;
+        return true;
     }
 
     @Override
@@ -363,10 +339,7 @@ public class ReportActivity extends AppCompatActivity {
 
         intent.putExtras(bundle);
 
-        // Note that ReportActivity should have `documentLaunchMode="intoExisting"` set in `AndroidManifest.xml`
-        // which has equivalent behaviour to FLAG_ACTIVITY_NEW_DOCUMENT.
-        // FLAG_ACTIVITY_SINGLE_TOP must also be passed for onNewIntent to be called.
-        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
     }
 
@@ -388,7 +361,7 @@ public class ReportActivity extends AppCompatActivity {
 
 
 
-    @NotNull
+    @NonNull
     private static String getReportInfoDirectoryPath(Context context) {
         // Canonicalize to solve /data/data and /data/user/0 issues when comparing with reportInfoFilePath
         return FileUtils.getCanonicalPath(context.getCacheDir().getAbsolutePath(), null) + "/" + CACHE_DIR_BASENAME;

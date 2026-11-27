@@ -5,8 +5,6 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.common.base.Strings;
-
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
@@ -206,7 +204,19 @@ public class DataUtils {
         if (string == null || string.isEmpty())
             return string;
         else
-            return string.replaceAll("(?m)^", Strings.repeat(indent, Math.max(count, 1)));
+            return string.replaceAll("(?m)^", repeat(indent, Math.max(count, 1)));
+    }
+
+    /** Repeat a string a nonnegative number of times. */
+    public static String repeat(@NonNull String value, int count) {
+        if (count < 0) throw new IllegalArgumentException("Negative repeat count " + count);
+        if (value.isEmpty() || count == 0) return "";
+
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            result.append(value);
+        }
+        return result.toString();
     }
 
 

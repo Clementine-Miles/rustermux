@@ -16,6 +16,7 @@ import android.util.JsonWriter;
 import android.util.SparseArray;
 
 import com.termux.api.TermuxAPIConstants;
+import com.termux.api.util.PendingIntentUtils;
 import com.termux.api.util.ResultReturner;
 import com.termux.shared.logger.Logger;
 
@@ -288,8 +289,7 @@ public class UsbAPI {
             // triggered, even though permission was granted and it won't need to be requested for
             // next open request.
             // - https://developer.android.com/about/versions/12/behavior-changes-12#pending-intent-mutability
-            //noinspection ObsoleteSdkInt
-            int pendingIntentFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_MUTABLE : 0;
+            int pendingIntentFlags = PendingIntentUtils.getPendingIntentMutableFlag();
             PendingIntent permissionIntent = PendingIntent.getBroadcast(this, 0, usbIntent, pendingIntentFlags);
 
             try {

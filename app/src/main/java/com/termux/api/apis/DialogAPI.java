@@ -1,16 +1,13 @@
 package com.termux.api.apis;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
-import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -21,7 +18,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -39,27 +35,20 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.widget.NestedScrollView;
 
-import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.termux.R;
-import com.termux.api.TermuxAPIConstants;
 import com.termux.api.util.ResultReturner;
 import com.termux.api.activities.TermuxApiPermissionActivity;
 import com.termux.shared.logger.Logger;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.theme.NightMode;
 import com.termux.shared.theme.ThemeUtils;
-import com.termux.shared.view.KeyboardUtils;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 
 /**
  * API that allows receiving user input interactively in a variety of different ways
@@ -94,12 +83,6 @@ public class DialogAPI {
         protected void onCreate(Bundle savedInstanceState) {
             Logger.logDebug(LOG_TAG, "onCreate");
             super.onCreate(savedInstanceState);
-
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                ResultReturner.returnError(this, getIntent(), TermuxAPIConstants.UNSUPPORTED_ANDROID_VERSION);
-                finish();
-                return;
-            }
 
             if (savedInstanceState != null)
                 mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
@@ -264,7 +247,7 @@ public class DialogAPI {
                     case "radio":
                         return new RadioInputMethod(activity);
                     case "sheet":
-                        return new BottomSheetInputMethod();
+                        return new ListInputMethod();
                     case "speech":
                         return new SpeechInputMethod(activity);
                     case "spinner":
@@ -305,7 +288,7 @@ public class DialogAPI {
             public String text = "";
             public String error = "";
             public int code = 0;
-            public static int index = -1;
+            public int index = -1;
             public List<Value> values = new ArrayList<>();
         }
 
@@ -608,8 +591,8 @@ public class DialogAPI {
 
             @Override
             String getResult() {
-                int hour = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? widgetView.getHour() : widgetView.getCurrentHour();
-                int minute = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? widgetView.getMinute() : widgetView.getCurrentMinute();
+                int hour = widgetView.getHour();
+                int minute = widgetView.getMinute();
                 return String.format(Locale.getDefault(), "%02d:%02d", hour, minute);
             }
 
@@ -661,125 +644,39 @@ public class DialogAPI {
             String getResult() {
                 int radioIndex = radioGroup.indexOfChild(widgetView.findViewById(radioGroup.getCheckedRadioButtonId()));
                 RadioButton radioButton = (RadioButton) radioGroup.getChildAt(radioIndex);
-                InputResult.index = radioIndex;
+                inputResult.index = radioIndex;
                 return (radioButton != null) ? radioButton.getText().toString() : "";
             }
         }
 
 
-        /**
-         * BottomSheet InputMethod
-         * Allow users to select from a variety of options in a bottom sheet dialog
-         */
-        public static class BottomSheetInputMethod extends BottomSheetDialogFragment implements InputMethod {
-            private InputResultListener resultListener;
-
+        static class ListInputMethod implements InputMethod {
+            private AlertDialog dialog;
 
             @Override
             public void create(AppCompatActivity activity, InputResultListener resultListener) {
-                this.resultListener = resultListener;
-                show(activity.getSupportFragmentManager(), "BOTTOM_SHEET");
-            }
-
-            @NonNull
-            @Override
-            public Dialog onCreateDialog(Bundle savedInstanceState) {
-                // create custom BottomSheetDialog that has friendlier dismissal behavior
-                return new BottomSheetDialog(requireActivity(), getTheme()) {
-                    @Override
-                    public void onBackPressed() {
-                        super.onBackPressed();
-                        // make it so that user only has to hit back key one time to get rid of bottom sheet
-                        requireActivity().onBackPressed();
-                        postCanceledResult();
-                    }
-
-                    @Override
-                    public void cancel() {
-                        super.cancel();
-
-                        if (isCurrentAppTermux()) {
-                            showKeyboard();
-                        }
-                        // dismiss on single touch outside of dialog
-                        requireActivity().onBackPressed();
-                        postCanceledResult();
-                    }
-                };
-            }
-
-            @SuppressLint("RestrictedApi")
-            @Override
-            public void setupDialog(final Dialog dialog, int style) {
-                LinearLayout layout = new LinearLayout(getContext());
-                layout.setMinimumHeight(100);
-                layout.setPadding(16, 16, 16, 16);
-                layout.setOrientation(LinearLayout.VERTICAL);
-
-                NestedScrollView scrollView = new NestedScrollView(requireContext());
-                final String[] values = getInputValues(requireActivity().getIntent());
-
-                for (int i = 0; i < values.length; ++i) {
-                    final int j = i;
-                    final TextView textView = new TextView(getContext());
-                    textView.setText(values[j]);
-                    textView.setTextSize(20);
-                    textView.setPadding(56, 56, 56, 56);
-                    textView.setOnClickListener(view -> {
+                String[] values = getInputValues(activity.getIntent());
+                InputResult canceled = new InputResult();
+                canceled.code = Dialog.BUTTON_NEGATIVE;
+                dialog = new AlertDialog.Builder(activity)
+                    .setItems(values, (window, selected) -> {
                         InputResult result = new InputResult();
-                        result.text = values[j];
-                        result.index = j;
-                        dismissDialog(dialog);
+                        result.text = values[selected];
+                        result.index = selected;
                         resultListener.onResult(result);
-                    });
-
-                    layout.addView(textView);
-                }
-                scrollView.addView(layout);
-                dialog.setContentView(scrollView);
-                hideKeyboard();
+                    })
+                    .setNegativeButton(android.R.string.cancel, (window, selected) -> resultListener.onResult(canceled))
+                    .setOnCancelListener(window -> resultListener.onResult(canceled))
+                    .create();
+                dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+                dialog.show();
             }
 
-            /**
-             * These keyboard methods exist to work around inconsistent show / hide behavior
-             * from canceling BottomSheetDialog and produces the desired result of hiding keyboard
-             * on creation of dialog and showing it after a selection or cancellation, as long as
-             * we are still within the Termux application
-             */
-
-            protected void hideKeyboard() {
-                KeyboardUtils.setSoftKeyboardAlwaysHiddenFlags(getActivity());
-            }
-
-            protected void showKeyboard() {
-                KeyboardUtils.showSoftKeyboard(getActivity(), getView());
-            }
-
-            /**
-             * Checks to see if foreground application is Termux
-             */
-            protected boolean isCurrentAppTermux() {
-                final ActivityManager activityManager = (ActivityManager) requireContext().getSystemService(Context.ACTIVITY_SERVICE);
-                final List<ActivityManager.RunningAppProcessInfo> runningProcesses = Objects.requireNonNull(activityManager).getRunningAppProcesses();
-                for (final ActivityManager.RunningAppProcessInfo processInfo : runningProcesses) {
-                    if (processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
-                        for (final String activeProcess : processInfo.pkgList) {
-                            if (activeProcess.equals(TermuxConstants.TERMUX_PACKAGE_NAME)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                return false;
-            }
-
-            protected void postCanceledResult() {
-                InputResult result = new InputResult();
-                result.code = Dialog.BUTTON_NEGATIVE;
-                resultListener.onResult(result);
+            @Override
+            public Dialog getDialog() {
+                return dialog;
             }
         }
-
 
         /**
          * Spinner InputMethod
@@ -793,7 +690,7 @@ public class DialogAPI {
 
             @Override
             String getResult() {
-                InputResult.index = widgetView.getSelectedItemPosition();
+                inputResult.index = widgetView.getSelectedItemPosition();
                 return widgetView.getSelectedItem().toString();
             }
 

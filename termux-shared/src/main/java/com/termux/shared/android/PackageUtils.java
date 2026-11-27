@@ -18,7 +18,6 @@ import androidx.annotation.RequiresApi;
 
 import com.termux.shared.R;
 import com.termux.shared.data.DataUtils;
-import com.termux.shared.interact.MessageDialogUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.reflection.ReflectionUtils;
 
@@ -29,67 +28,6 @@ import java.util.List;
 public class PackageUtils {
 
     private static final String LOG_TAG = "PackageUtils";
-
-    /**
-     * Get the {@link Context} for the package name with {@link Context#CONTEXT_RESTRICTED} flags.
-     *
-     * @param context The {@link Context} to use to get the {@link Context} of the {@code packageName}.
-     * @param packageName The package name whose {@link Context} to get.
-     * @return Returns the {@link Context}. This will {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static Context getContextForPackage(@NonNull final Context context, String packageName) {
-       return getContextForPackage(context, packageName, Context.CONTEXT_RESTRICTED);
-    }
-
-    /**
-     * Get the {@link Context} for the package name.
-     *
-     * @param context The {@link Context} to use to get the {@link Context} of the {@code packageName}.
-     * @param packageName The package name whose {@link Context} to get.
-     * @param flags The flags for {@link Context} type.
-     * @return Returns the {@link Context}. This will {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static Context getContextForPackage(@NonNull final Context context, String packageName, int flags) {
-        try {
-            return context.createPackageContext(packageName, flags);
-        } catch (Exception e) {
-            Logger.logVerbose(LOG_TAG, "Failed to get \"" + packageName + "\" package context with flags " + flags + ": " + e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Get the {@link Context} for a package name.
-     *
-     * @param context The {@link Context} to use to get the {@link Context} of the {@code packageName}.
-     * @param packageName The package name whose {@link Context} to get.
-     * @param exitAppOnError If {@code true} and failed to get package context, then a dialog will
-     *                       be shown which when dismissed will exit the app.
-     * @param helpUrl The help user to add to {@link R.string#error_get_package_context_failed_help_url_message}.
-     * @return Returns the {@link Context}. This will {@code null} if an exception is raised.
-     */
-    @Nullable
-    public static Context getContextForPackageOrExitApp(@NonNull Context context, String packageName,
-                                                        final boolean exitAppOnError, @Nullable String helpUrl) {
-        Context packageContext = getContextForPackage(context, packageName);
-
-        if (packageContext == null && exitAppOnError) {
-            String errorMessage = context.getString(R.string.error_get_package_context_failed_message,
-                packageName);
-            if (!DataUtils.isNullOrEmpty(helpUrl))
-                errorMessage += "\n" + context.getString(R.string.error_get_package_context_failed_help_url_message, helpUrl);
-            Logger.logError(LOG_TAG, errorMessage);
-            MessageDialogUtils.exitAppWithErrorMessage(context,
-                context.getString(R.string.error_get_package_context_failed_title),
-                errorMessage);
-        }
-
-        return packageContext;
-    }
-
-
 
     /**
      * Get the {@link PackageInfo} for the package associated with the {@code context}.
@@ -127,8 +65,6 @@ public class PackageUtils {
     /**
      * Get the {@link PackageInfo} for the package associated with the {@code packageName}.
      *
-     * Also check {@link #isAppInstalled(Context, String, String) if targetting targeting sdk
-     * `30` (android `11`) since {@link PackageManager.NameNotFoundException} may be thrown.
      *
      * @param context The {@link Context} for operations.
      * @param packageName The package name of the package.
@@ -161,8 +97,6 @@ public class PackageUtils {
     /**
      * Get the {@link ApplicationInfo} for the {@code packageName}.
      *
-     * Also check {@link #isAppInstalled(Context, String, String) if targetting targeting sdk
-     * `30` (android `11`) since {@link PackageManager.NameNotFoundException} may be thrown.
      *
      * @param context The {@link Context} for operations.
      * @param packageName The package name of the package.
@@ -575,7 +509,7 @@ public class PackageUtils {
              * Need a device that allows (manual) installation of apk with mismatched signature of
              * sharedUserId apps to test. Currently, if its done, PackageManager just doesn't load
              * the package and removes its apk automatically if its installed as a user app instead of system app
-             * W/PackageManager: Failed to parse /path/to/com.termux.tasker.apk: Signature mismatch for shared user: SharedUserSetting{xxxxxxx com.termux/10xxx}
+             * W/PackageManager: Failed to parse /path/to/com.example.app.apk: Signature mismatch for shared user: SharedUserSetting{xxxxxxx com.termux/10xxx}
              */
             PackageInfo packageInfo = getPackageInfoForPackage(context, packageName, PackageManager.GET_SIGNATURES);
             if (packageInfo == null) return null;
@@ -664,50 +598,6 @@ public class PackageUtils {
         return null;
     }
 
-
-
-    /**
-     * Check if app is installed and enabled. This can be used by external apps that don't
-     * share `sharedUserId` with the an app.
-     *
-     * If your third-party app is targeting sdk `30` (android `11`), then it needs to add package
-     * name to the `queries` element or request `QUERY_ALL_PACKAGES` permission in its
-     * `AndroidManifest.xml`. Otherwise it will get `PackageSetting{...... package_name/......} BLOCKED`
-     * errors in `logcat` and  {@link PackageManager.NameNotFoundException} may be thrown.
-     * `RUN_COMMAND` intent won't work either.
-     * Check [package-visibility](https://developer.android.com/training/basics/intents/package-visibility#package-name),
-     * `QUERY_ALL_PACKAGES` [googleplay policy](https://support.google.com/googleplay/android-developer/answer/10158779
-     * and this [article](https://medium.com/androiddevelopers/working-with-package-visibility-dc252829de2d) for more info.
-     *
-     * {@code
-     * <manifest
-     *     <queries>
-     *         <package android:name="com.termux" />
-     *    </queries>
-     *
-     *    <application
-     *        ....
-     *    </application>
-     * </manifest>
-     * }
-     *
-     * @param context The context for operations.
-     * @param appName The name of the app.
-     * @param packageName The package name of the package.
-     * @return Returns {@code errmsg} if {@code packageName} is not installed or disabled, otherwise {@code null}.
-     */
-    public static String isAppInstalled(@NonNull final Context context, String appName, String packageName) {
-        String errmsg = null;
-
-        ApplicationInfo applicationInfo = getApplicationInfoForPackage(context, packageName);
-        boolean isAppEnabled = (applicationInfo != null && applicationInfo.enabled);
-
-        // If app is not installed or is disabled
-        if (!isAppEnabled)
-            errmsg = context.getString(R.string.error_app_not_installed_or_disabled_warning, appName, packageName);
-
-        return errmsg;
-    }
 
 
     /** Wrapper for {@link #setComponentState(Context, String, String, boolean, String, boolean, boolean)} with

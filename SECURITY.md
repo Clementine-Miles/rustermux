@@ -1,1 +1,1 @@
-Check https://termux.dev/security for info on Termux security policies and how to report vulnerabilities.
+Report rustermux vulnerabilities through the repository's [Security page](https://github.com/Clementine-Miles/rustermux/security). Keep sensitive reproduction details out of public issues.

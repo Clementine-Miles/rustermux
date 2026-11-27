@@ -3,7 +3,6 @@ package com.termux.api.apis;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
 import android.telephony.SmsManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionInfo;
@@ -57,8 +56,6 @@ public class SmsSendAPI {
         if(slot == -1) {
             return SmsManager.getDefault();
         } else {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null;
-
             SubscriptionManager sm = context.getSystemService(SubscriptionManager.class);
             if(sm == null) {
                 Logger.logError(LOG_TAG, "SubscriptionManager not supported");

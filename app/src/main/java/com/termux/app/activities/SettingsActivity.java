@@ -1,158 +1,159 @@
 package com.termux.app.activities;
 
-import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
-import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.preference.Preference;
-import androidx.preference.PreferenceFragmentCompat;
+import androidx.appcompat.widget.SwitchCompat;
 
 import com.termux.R;
-import com.termux.shared.activities.ReportActivity;
-import com.termux.shared.file.FileUtils;
-import com.termux.shared.models.ReportInfo;
-import com.termux.app.models.UserAction;
-import com.termux.shared.interact.ShareUtils;
-import com.termux.shared.android.PackageUtils;
-import com.termux.shared.termux.settings.preferences.TermuxFloatAppSharedPreferences;
-import com.termux.shared.termux.settings.preferences.TermuxTaskerAppSharedPreferences;
-import com.termux.shared.termux.settings.preferences.TermuxWidgetAppSharedPreferences;
-import com.termux.shared.android.AndroidUtils;
-import com.termux.shared.termux.TermuxConstants;
-import com.termux.shared.termux.TermuxUtils;
+import com.termux.app.terminal.TerminalAppearance;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
+import com.termux.shared.android.PackageUtils;
+import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.theme.NightMode;
 
-public class SettingsActivity extends AppCompatActivity {
+import java.util.function.Consumer;
+
+public final class SettingsActivity extends AppCompatActivity {
+
+    private static final String APPEARANCE_CHANGED = "appearance_changed";
+
+    private LinearLayout options;
+    private TermuxAppSharedPreferences preferences;
+    private boolean appearanceChanged;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
-
         setContentView(R.layout.activity_settings);
-        if (savedInstanceState == null) {
-            getSupportFragmentManager()
-                .beginTransaction()
-                .replace(R.id.settings, new RootPreferencesFragment())
-                .commit();
-        }
-
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
+
+        preferences = TermuxAppSharedPreferences.build(this);
+        if (savedInstanceState != null && savedInstanceState.getBoolean(APPEARANCE_CHANGED)) {
+            onAppearanceChanged();
+        }
+
+        options = findViewById(R.id.settings);
+        TerminalAppearance appearance = new TerminalAppearance(this, preferences.getSharedPreferences());
+        addHeading(R.string.action_terminal_appearance);
+        addAction(R.string.appearance_color_scheme,
+            () -> appearance.showOptions(TerminalAppearance.Setting.COLOR_SCHEME, this::onAppearanceChanged));
+        addAction(R.string.appearance_font,
+            () -> appearance.showOptions(TerminalAppearance.Setting.FONT, this::onAppearanceChanged));
+
+        addHeading(R.string.settings_terminal);
+        addToggle(R.string.settings_extra_keys, preferences.shouldShowTerminalToolbar(), preferences::setShowTerminalToolbar);
+        addToggle(R.string.action_toggle_keep_screen_on, preferences.shouldKeepScreenOn(), preferences::setKeepScreenOn);
+        addToggle(R.string.settings_keyboard_insets, preferences.isTerminalMarginAdjustmentEnabled(), preferences::setTerminalMarginAdjustment);
+
+        addHeading(R.string.settings_input);
+        addToggle(R.string.settings_soft_keyboard, preferences.isSoftKeyboardEnabled(), preferences::setSoftKeyboardEnabled);
+        addToggle(R.string.settings_soft_keyboard_without_hardware,
+            preferences.isSoftKeyboardEnabledOnlyIfNoHardware(), preferences::setSoftKeyboardEnabledOnlyIfNoHardware);
+
+        addHeading(R.string.settings_storage);
+        addAction(R.string.settings_app_permissions, () -> startActivity(new Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getPackageName(), null))));
+
+        addHeading(R.string.settings_diagnostics);
+        addAction(R.string.settings_log_level, this::showLogLevels);
+        addToggle(R.string.settings_key_logging, preferences.isTerminalViewKeyLoggingEnabled(),
+            preferences::setTerminalViewKeyLoggingEnabled);
+        addToggle(R.string.settings_crash_notifications,
+            preferences.areCrashReportNotificationsEnabled(), preferences::setCrashReportNotificationsEnabled);
+        addAction(R.string.action_open_help, this::showHelp);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putBoolean(APPEARANCE_CHANGED, appearanceChanged);
     }
 
     @Override
     public boolean onSupportNavigateUp() {
-        onBackPressed();
+        finish();
         return true;
     }
 
-    public static class RootPreferencesFragment extends PreferenceFragmentCompat {
-        @Override
-        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-            Context context = getContext();
-            if (context == null) return;
-
-            setPreferencesFromResource(R.xml.root_preferences, rootKey);
-
-            new Thread() {
-                @Override
-                public void run() {
-                    configureTermuxFloatPreference(context);
-                    configureTermuxTaskerPreference(context);
-                    configureTermuxWidgetPreference(context);
-                    configureAboutPreference(context);
-                    configureDonatePreference(context);
-                }
-            }.start();
-        }
-
-        private void configureTermuxFloatPreference(@NonNull Context context) {
-            Preference termuxFloatPreference = findPreference("termux_float");
-            if (termuxFloatPreference != null) {
-                TermuxFloatAppSharedPreferences preferences = TermuxFloatAppSharedPreferences.build(context, false);
-                // If failed to get app preferences, then likely app is not installed, so do not show its preference
-                termuxFloatPreference.setVisible(preferences != null);
-            }
-        }
-
-        private void configureTermuxTaskerPreference(@NonNull Context context) {
-            Preference termuxTaskerPreference = findPreference("termux_tasker");
-            if (termuxTaskerPreference != null) {
-                TermuxTaskerAppSharedPreferences preferences = TermuxTaskerAppSharedPreferences.build(context, false);
-                // If failed to get app preferences, then likely app is not installed, so do not show its preference
-                termuxTaskerPreference.setVisible(preferences != null);
-            }
-        }
-
-        private void configureTermuxWidgetPreference(@NonNull Context context) {
-            Preference termuxWidgetPreference = findPreference("termux_widget");
-            if (termuxWidgetPreference != null) {
-                TermuxWidgetAppSharedPreferences preferences = TermuxWidgetAppSharedPreferences.build(context, false);
-                // If failed to get app preferences, then likely app is not installed, so do not show its preference
-                termuxWidgetPreference.setVisible(preferences != null);
-            }
-        }
-
-        private void configureAboutPreference(@NonNull Context context) {
-            Preference aboutPreference = findPreference("about");
-            if (aboutPreference != null) {
-                aboutPreference.setOnPreferenceClickListener(preference -> {
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            String title = "About";
-
-                            StringBuilder aboutString = new StringBuilder();
-                            aboutString.append(TermuxUtils.getAppInfoMarkdownString(context, TermuxUtils.AppInfoMode.TERMUX_AND_PLUGIN_PACKAGES));
-                            aboutString.append("\n\n").append(AndroidUtils.getDeviceInfoMarkdownString(context, true));
-                            aboutString.append("\n\n").append(TermuxUtils.getImportantLinksMarkdownString(context));
-
-                            String userActionName = UserAction.ABOUT.getName();
-
-                            ReportInfo reportInfo = new ReportInfo(userActionName,
-                                TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME, title);
-                            reportInfo.setReportString(aboutString.toString());
-                            reportInfo.setReportSaveFileLabelAndPath(userActionName,
-                                Environment.getExternalStorageDirectory() + "/" +
-                                    FileUtils.sanitizeFileName(TermuxConstants.TERMUX_APP_NAME + "-" + userActionName + ".log", true, true));
-
-                            ReportActivity.startReportActivity(context, reportInfo);
-                        }
-                    }.start();
-
-                    return true;
-                });
-            }
-        }
-
-        private void configureDonatePreference(@NonNull Context context) {
-            Preference donatePreference = findPreference("donate");
-            if (donatePreference != null) {
-                String signingCertificateSHA256Digest = PackageUtils.getSigningCertificateSHA256DigestForPackage(context);
-                if (signingCertificateSHA256Digest != null) {
-                    // If APK is a Google Playstore release, then do not show the donation link
-                    // since Termux isn't exempted from the playstore policy donation links restriction
-                    // Check Fund solicitations: https://pay.google.com/intl/en_in/about/policy/
-                    String apkRelease = TermuxUtils.getAPKRelease(signingCertificateSHA256Digest);
-                    if (apkRelease == null || apkRelease.equals(TermuxConstants.APK_RELEASE_GOOGLE_PLAYSTORE_SIGNING_CERTIFICATE_SHA256_DIGEST)) {
-                        donatePreference.setVisible(false);
-                        return;
-                    } else {
-                        donatePreference.setVisible(true);
-                    }
-                }
-
-                donatePreference.setOnPreferenceClickListener(preference -> {
-                    ShareUtils.openUrl(context, TermuxConstants.TERMUX_DONATE_URL);
-                    return true;
-                });
-            }
-        }
+    private void onAppearanceChanged() {
+        appearanceChanged = true;
+        setResult(RESULT_OK);
     }
 
+    private void addHeading(int title) {
+        TextView heading = new TextView(this);
+        heading.setText(title);
+        heading.setTextAppearance(android.R.style.TextAppearance_Material_Subhead);
+        heading.setPaddingRelative(dp(12), dp(16), dp(12), dp(4));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) heading.setAccessibilityHeading(true);
+        options.addView(heading);
+    }
+
+    private void addAction(int title, Runnable action) {
+        Button button = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        button.setText(title);
+        button.setAllCaps(false);
+        button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        button.setMinHeight(dp(48));
+        button.setPaddingRelative(dp(12), dp(4), dp(12), dp(4));
+        button.setOnClickListener(view -> action.run());
+        options.addView(button);
+    }
+
+    private void addToggle(int title, boolean initial, Consumer<Boolean> update) {
+        SwitchCompat toggle = new SwitchCompat(this);
+        toggle.setText(title);
+        toggle.setMinHeight(dp(48));
+        toggle.setPaddingRelative(dp(12), dp(4), dp(12), dp(4));
+        toggle.setChecked(initial);
+        toggle.setOnCheckedChangeListener((view, checked) -> update.accept(checked));
+        options.addView(toggle);
+    }
+
+    private void showHelp() {
+        String version = PackageUtils.getVersionNameForPackage(this);
+        new AlertDialog.Builder(this)
+            .setTitle(version == null ? getString(R.string.application_name) : getString(R.string.settings_about, version))
+            .setMessage(R.string.settings_help_text)
+            .setPositiveButton(android.R.string.ok, null)
+            .show();
+    }
+
+    private void showLogLevels() {
+        CharSequence[] levels = Logger.getLogLevelsArray();
+        CharSequence[] labels = Logger.getLogLevelLabelsArray(this, levels, true);
+        String currentLevel = String.valueOf(preferences.getLogLevel());
+        int selected = -1;
+        for (int i = 0; i < levels.length; i++) {
+            if (currentLevel.contentEquals(levels[i])) {
+                selected = i;
+                break;
+            }
+        }
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.settings_log_level)
+            .setSingleChoiceItems(labels, selected, (dialog, which) -> {
+                preferences.setLogLevel(this, Integer.parseInt(levels[which].toString()));
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
 }

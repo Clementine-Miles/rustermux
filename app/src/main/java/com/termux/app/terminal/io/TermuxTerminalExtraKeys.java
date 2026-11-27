@@ -1,11 +1,8 @@
 package com.termux.app.terminal.io;
 
-import android.annotation.SuppressLint;
-import android.view.Gravity;
 import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.termux.app.TermuxActivity;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -38,15 +35,12 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         mActivity = activity;
         mTermuxTerminalViewClient = termuxTerminalViewClient;
         mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
-
-        setExtraKeys();
     }
-
 
     /**
      * Set the terminal extra keys and style.
      */
-    private void setExtraKeys() {
+    public void reloadExtraKeys() {
         mExtraKeysInfo = null;
 
         try {
@@ -71,7 +65,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
                 mExtraKeysInfo = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS, TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
             } catch (JSONException e2) {
                 Logger.showToast(mActivity, "Can't create default extra keys",true);
-                Logger.logStackTraceWithMessage(LOG_TAG, "Could create default extra keys: ", e);
+                Logger.logStackTraceWithMessage(LOG_TAG, "Could not create default extra keys", e2);
                 mExtraKeysInfo = null;
             }
         }
@@ -81,18 +75,13 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         return mExtraKeysInfo;
     }
 
-    @SuppressLint("RtlHardcoded")
     @Override
     public void onTerminalExtraKeyButtonClick(View view, String key, boolean ctrlDown, boolean altDown, boolean shiftDown, boolean fnDown) {
         if ("KEYBOARD".equals(key)) {
             if(mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
         } else if ("DRAWER".equals(key)) {
-            DrawerLayout drawerLayout = mTermuxTerminalViewClient.getActivity().getDrawer();
-            if (drawerLayout.isDrawerOpen(Gravity.LEFT))
-                drawerLayout.closeDrawer(Gravity.LEFT);
-            else
-                drawerLayout.openDrawer(Gravity.LEFT);
+            mActivity.toggleSessions();
         } else if ("PASTE".equals(key)) {
             if(mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(null);

@@ -2,16 +2,15 @@ package com.termux.shared.termux.shell.command.runner.terminal;
 
 import android.content.Context;
 import android.system.OsConstants;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.common.base.Joiner;
 import com.termux.shared.R;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.environment.ShellEnvironmentUtils;
 import com.termux.shared.shell.command.environment.UnixShellEnvironment;
-import com.termux.shared.shell.command.result.ResultData;
 import com.termux.shared.errors.Errno;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.shell.command.environment.IShellEnvironment;
@@ -34,16 +33,14 @@ public class TermuxSession {
     private final TerminalSession mTerminalSession;
     private final ExecutionCommand mExecutionCommand;
     private final TermuxSessionClient mTermuxSessionClient;
-    private final boolean mSetStdoutOnExit;
 
     private static final String LOG_TAG = "TermuxSession";
 
     private TermuxSession(@NonNull final TerminalSession terminalSession, @NonNull final ExecutionCommand executionCommand,
-                          final TermuxSessionClient termuxSessionClient, final boolean setStdoutOnExit) {
+                          final TermuxSessionClient termuxSessionClient) {
         this.mTerminalSession = terminalSession;
         this.mExecutionCommand = executionCommand;
         this.mTermuxSessionClient = termuxSessionClient;
-        this.mSetStdoutOnExit = setStdoutOnExit;
     }
 
     /**
@@ -65,20 +62,12 @@ public class TermuxSession {
      * @param shellEnvironmentClient The {@link IShellEnvironment} interface implementation.
      * @param additionalEnvironment The additional shell environment variables to export. Existing
      *                              variables will be overridden.
-     * @param setStdoutOnExit If set to {@code true}, then the {@link ResultData#stdout}
-     *                        available in the {@link TermuxSessionClient#onTermuxSessionExited(TermuxSession)}
-     *                        callback will be set to the {@link TerminalSession} transcript. The session
-     *                        transcript will contain both stdout and stderr combined, basically
-     *                        anything sent to the the pseudo terminal /dev/pts, including PS1 prefixes.
-     *                        Set this to {@code true} only if the session transcript is required,
-     *                        since this requires extra processing to get it.
      * @return Returns the {@link TermuxSession}. This will be {@code null} if failed to start the execution command.
      */
     public static TermuxSession execute(@NonNull final Context currentPackageContext, @NonNull ExecutionCommand executionCommand,
                                         @NonNull final TerminalSessionClient terminalSessionClient, final TermuxSessionClient termuxSessionClient,
                                         @NonNull final IShellEnvironment shellEnvironmentClient,
-                                        @Nullable HashMap<String, String> additionalEnvironment,
-                                        final boolean setStdoutOnExit) {
+                                        @Nullable HashMap<String, String> additionalEnvironment) {
         if (executionCommand.executable != null && executionCommand.executable.isEmpty())
             executionCommand.executable = null;
         if (executionCommand.workingDirectory == null || executionCommand.workingDirectory.isEmpty())
@@ -150,7 +139,7 @@ public class TermuxSession {
 
         Logger.logDebugExtended(LOG_TAG, executionCommand.toString());
         Logger.logVerboseExtended(LOG_TAG, "\"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession Environment:\n" +
-            Joiner.on("\n").join(environmentArray));
+            TextUtils.join("\n", environmentArray));
 
         Logger.logDebug(LOG_TAG, "Running \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession");
         TerminalSession terminalSession = new TerminalSession(executionCommand.executable,
@@ -161,16 +150,14 @@ public class TermuxSession {
             terminalSession.mSessionName = executionCommand.shellName;
         }
 
-        return new TermuxSession(terminalSession, executionCommand, termuxSessionClient, setStdoutOnExit);
+        return new TermuxSession(terminalSession, executionCommand, termuxSessionClient);
     }
 
     /**
      * Signal that this {@link TermuxSession} has finished.  This should be called when
      * {@link TerminalSessionClient#onSessionFinished(TerminalSession)} callback is received by the caller.
      *
-     * If the processes has finished, then sets {@link ResultData#stdout}, {@link ResultData#stderr}
-     * and {@link ResultData#exitCode} for the {@link #mExecutionCommand} of the {@code termuxTask}
-     * and then calls {@link #processTermuxSessionResult(TermuxSession, ExecutionCommand)} to process the result}.
+     * Records the exit code and notifies the session client.
      *
      */
     public void finish() {
@@ -192,9 +179,6 @@ public class TermuxSession {
 
         mExecutionCommand.resultData.exitCode = exitCode;
 
-        if (this.mSetStdoutOnExit)
-            mExecutionCommand.resultData.stdout.append(ShellUtils.getTerminalSessionTranscriptText(mTerminalSession, true, false));
-
         if (!mExecutionCommand.setState(ExecutionCommand.ExecutionState.EXECUTED))
             return;
 
@@ -202,7 +186,7 @@ public class TermuxSession {
     }
 
     /**
-     * Kill this {@link TermuxSession} by sending a {@link OsConstants#SIGILL} to its {@link #mTerminalSession}
+     * Kill this {@link TermuxSession} by sending a {@link OsConstants#SIGKILL} to its {@link #mTerminalSession}
      * if its still executing.
      *
      * @param context The {@link Context} for operations.
@@ -220,10 +204,6 @@ public class TermuxSession {
         if (mExecutionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), context.getString(R.string.error_sending_sigkill_to_process))) {
             if (processResult) {
                 mExecutionCommand.resultData.exitCode = 137; // SIGKILL
-
-                // Get whatever output has been set till now in case its needed
-                if (this.mSetStdoutOnExit)
-                    mExecutionCommand.resultData.stdout.append(ShellUtils.getTerminalSessionTranscriptText(mTerminalSession, true, false));
 
                 TermuxSession.processTermuxSessionResult(this, null);
             }
@@ -243,10 +223,10 @@ public class TermuxSession {
      * callback will be called.
      *
      * @param termuxSession The {@link TermuxSession}, which should be set if
-     *                  {@link #execute(Context, ExecutionCommand, TerminalSessionClient, TermuxSessionClient, IShellEnvironment, HashMap, boolean)}
+     *                  {@link #execute(Context, ExecutionCommand, TerminalSessionClient, TermuxSessionClient, IShellEnvironment, HashMap)}
      *                   successfully started the process.
      * @param executionCommand The {@link ExecutionCommand}, which should be set if
-     *                          {@link #execute(Context, ExecutionCommand, TerminalSessionClient, TermuxSessionClient, IShellEnvironment, HashMap, boolean)}
+     *                          {@link #execute(Context, ExecutionCommand, TerminalSessionClient, TermuxSessionClient, IShellEnvironment, HashMap)}
      *                          failed to start the process.
      */
     private static void processTermuxSessionResult(final TermuxSession termuxSession, ExecutionCommand executionCommand) {

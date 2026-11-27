@@ -1,6 +1,5 @@
 package com.termux.shared.termux.settings.properties;
 
-import com.google.common.collect.ImmutableBiMap;
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.theme.NightMode;
 import com.termux.shared.file.FileUtils;
@@ -15,84 +14,13 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
-/*
- * Version: v0.18.0
- * SPDX-License-Identifier: MIT
- *
- * Changelog
- *
- * - 0.1.0 (2021-03-11)
- *      - Initial Release.
- *
- * - 0.2.0 (2021-03-11)
- *      - Renamed `HOME_PATH` to `TERMUX_HOME_DIR_PATH`.
- *      - Renamed `TERMUX_PROPERTIES_PRIMARY_PATH` to `TERMUX_PROPERTIES_PRIMARY_FILE_PATH`.
- *      - Renamed `TERMUX_PROPERTIES_SECONDARY_FILE_PATH` to `TERMUX_PROPERTIES_SECONDARY_FILE_PATH`.
- *
- * - 0.3.0 (2021-03-16)
- *      - Add `*TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR*`.
- *
- * - 0.4.0 (2021-03-16)
- *      - Removed `MAP_GENERIC_BOOLEAN` and `MAP_GENERIC_INVERTED_BOOLEAN`.
- *
- * - 0.5.0 (2021-03-25)
- *      - Add `KEY_HIDE_SOFT_KEYBOARD_ON_STARTUP`.
- *
- * - 0.6.0 (2021-04-07)
- *      - Updated javadocs.
- *
- * - 0.7.0 (2021-05-09)
- *      - Add `*SOFT_KEYBOARD_TOGGLE_BEHAVIOUR*`.
- *
- * - 0.8.0 (2021-05-10)
- *      - Change the `KEY_USE_BACK_KEY_AS_ESCAPE_KEY` and `KEY_VIRTUAL_VOLUME_KEYS_DISABLED` booleans
- *          to `KEY_BACK_KEY_BEHAVIOUR` and `KEY_VOLUME_KEYS_BEHAVIOUR` String internal values.
- *      - Renamed `SOFT_KEYBOARD_TOGGLE_BEHAVIOUR` to `KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR`.
- *
- * - 0.9.0 (2021-05-14)
- *      - Add `*KEY_TERMINAL_CURSOR_BLINK_RATE*`.
- *
- * - 0.10.0 (2021-05-15)
- *      - Add `MAP_BACK_KEY_BEHAVIOUR`, `MAP_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR`, `MAP_VOLUME_KEYS_BEHAVIOUR`.
- *
- * - 0.11.0 (2021-06-10)
- *      - Add `*KEY_TERMINAL_TRANSCRIPT_ROWS*`.
- *
- * - 0.12.0 (2021-06-10)
- *      - Add `*KEY_TERMINAL_CURSOR_STYLE*`.
- *
- * - 0.13.0 (2021-08-25)
- *      - Add `*KEY_TERMINAL_MARGIN_HORIZONTAL*` and `*KEY_TERMINAL_MARGIN_VERTICAL*`.
- *
- * - 0.14.0 (2021-09-02)
- *      - Add `getTermuxFloatPropertiesFile()`.
- *
- * - 0.15.0 (2021-09-05)
- *      - Add `KEY_EXTRA_KEYS_TEXT_ALL_CAPS`.
- *
- * - 0.16.0 (2021-10-21)
- *      - Add `KEY_NIGHT_MODE`.
- *
- * - 0.17.0 (2022-03-17)
- *      - Add `KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT`.
- *
- * - 0.18.0 (2022-06-13)
- *      - Add `KEY_DISABLE_FILE_SHARE_RECEIVER` and `KEY_DISABLE_FILE_VIEW_RECEIVER`.
- */
+import static com.termux.shared.settings.properties.SharedProperties.orderedPropertyValues;
 
-/**
- * A class that defines shared constants of the SharedProperties used by Termux app and its plugins.
- * This class will be hosted by termux-shared lib and should be imported by other termux plugin
- * apps as is instead of copying constants to random classes. The 3rd party apps can also import
- * it for interacting with termux apps. If changes are made to this file, increment the version number
- * and add an entry in the Changelog section above.
- *
- * The properties are loaded from the first file found at
- * {@link TermuxConstants#TERMUX_PROPERTIES_PRIMARY_FILE_PATH} or
- * {@link TermuxConstants#TERMUX_PROPERTIES_SECONDARY_FILE_PATH}
- */
+/* SPDX-License-Identifier: MIT */
+
 public final class TermuxPropertyConstants {
 
     private static final String LOG_TAG = "TermuxPropertyConstants";
@@ -180,13 +108,12 @@ public final class TermuxPropertyConstants {
     public static final int IVALUE_BELL_BEHAVIOUR_IGNORE = 3;
     public static final int DEFAULT_IVALUE_BELL_BEHAVIOUR = IVALUE_BELL_BEHAVIOUR_VIBRATE;
 
-    /** Defines the bidirectional map for bell behaviour values and their internal values */
-    public static final ImmutableBiMap<String, Integer> MAP_BELL_BEHAVIOUR =
-        new ImmutableBiMap.Builder<String, Integer>()
-            .put(VALUE_BELL_BEHAVIOUR_VIBRATE, IVALUE_BELL_BEHAVIOUR_VIBRATE)
-            .put(VALUE_BELL_BEHAVIOUR_BEEP, IVALUE_BELL_BEHAVIOUR_BEEP)
-            .put(VALUE_BELL_BEHAVIOUR_IGNORE, IVALUE_BELL_BEHAVIOUR_IGNORE)
-            .build();
+    /** Maps bell behaviour values to their internal values. */
+    public static final Map<String, Integer> MAP_BELL_BEHAVIOUR = orderedPropertyValues(values -> {
+        values.put(VALUE_BELL_BEHAVIOUR_VIBRATE, IVALUE_BELL_BEHAVIOUR_VIBRATE);
+        values.put(VALUE_BELL_BEHAVIOUR_BEEP, IVALUE_BELL_BEHAVIOUR_BEEP);
+        values.put(VALUE_BELL_BEHAVIOUR_IGNORE, IVALUE_BELL_BEHAVIOUR_IGNORE);
+    });
 
 
 
@@ -210,13 +137,12 @@ public final class TermuxPropertyConstants {
     public static final int IVALUE_TERMINAL_CURSOR_STYLE_BAR = TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR;
     public static final int DEFAULT_IVALUE_TERMINAL_CURSOR_STYLE = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE;
 
-    /** Defines the bidirectional map for terminal cursor styles and their internal values */
-    public static final ImmutableBiMap<String, Integer> MAP_TERMINAL_CURSOR_STYLE =
-        new ImmutableBiMap.Builder<String, Integer>()
-            .put(VALUE_TERMINAL_CURSOR_STYLE_BLOCK, IVALUE_TERMINAL_CURSOR_STYLE_BLOCK)
-            .put(VALUE_TERMINAL_CURSOR_STYLE_UNDERLINE, IVALUE_TERMINAL_CURSOR_STYLE_UNDERLINE)
-            .put(VALUE_TERMINAL_CURSOR_STYLE_BAR, IVALUE_TERMINAL_CURSOR_STYLE_BAR)
-            .build();
+    /** Maps terminal cursor styles to their internal values. */
+    public static final Map<String, Integer> MAP_TERMINAL_CURSOR_STYLE = orderedPropertyValues(values -> {
+        values.put(VALUE_TERMINAL_CURSOR_STYLE_BLOCK, IVALUE_TERMINAL_CURSOR_STYLE_BLOCK);
+        values.put(VALUE_TERMINAL_CURSOR_STYLE_UNDERLINE, IVALUE_TERMINAL_CURSOR_STYLE_UNDERLINE);
+        values.put(VALUE_TERMINAL_CURSOR_STYLE_BAR, IVALUE_TERMINAL_CURSOR_STYLE_BAR);
+    });
 
 
 
@@ -285,14 +211,13 @@ public final class TermuxPropertyConstants {
     public static final int ACTION_SHORTCUT_PREVIOUS_SESSION = 3;
     public static final int ACTION_SHORTCUT_RENAME_SESSION = 4;
 
-    /** Defines the bidirectional map for session shortcut values and their internal actions */
-    public static final ImmutableBiMap<String, Integer> MAP_SESSION_SHORTCUTS =
-        new ImmutableBiMap.Builder<String, Integer>()
-            .put(KEY_SHORTCUT_CREATE_SESSION, ACTION_SHORTCUT_CREATE_SESSION)
-            .put(KEY_SHORTCUT_NEXT_SESSION, ACTION_SHORTCUT_NEXT_SESSION)
-            .put(KEY_SHORTCUT_PREVIOUS_SESSION, ACTION_SHORTCUT_PREVIOUS_SESSION)
-            .put(KEY_SHORTCUT_RENAME_SESSION, ACTION_SHORTCUT_RENAME_SESSION)
-            .build();
+    /** Maps session shortcut values to their internal actions. */
+    public static final Map<String, Integer> MAP_SESSION_SHORTCUTS = orderedPropertyValues(values -> {
+        values.put(KEY_SHORTCUT_CREATE_SESSION, ACTION_SHORTCUT_CREATE_SESSION);
+        values.put(KEY_SHORTCUT_NEXT_SESSION, ACTION_SHORTCUT_NEXT_SESSION);
+        values.put(KEY_SHORTCUT_PREVIOUS_SESSION, ACTION_SHORTCUT_PREVIOUS_SESSION);
+        values.put(KEY_SHORTCUT_RENAME_SESSION, ACTION_SHORTCUT_RENAME_SESSION);
+    });
 
 
 
@@ -307,12 +232,11 @@ public final class TermuxPropertyConstants {
     public static final String IVALUE_BACK_KEY_BEHAVIOUR_ESCAPE = "escape";
     public static final String DEFAULT_IVALUE_BACK_KEY_BEHAVIOUR = IVALUE_BACK_KEY_BEHAVIOUR_BACK;
 
-    /** Defines the bidirectional map for back key behaviour values and their internal values */
-    public static final ImmutableBiMap<String, String> MAP_BACK_KEY_BEHAVIOUR =
-        new ImmutableBiMap.Builder<String, String>()
-            .put(IVALUE_BACK_KEY_BEHAVIOUR_BACK, IVALUE_BACK_KEY_BEHAVIOUR_BACK)
-            .put(IVALUE_BACK_KEY_BEHAVIOUR_ESCAPE, IVALUE_BACK_KEY_BEHAVIOUR_ESCAPE)
-            .build();
+    /** Maps back key behaviour values to their internal values. */
+    public static final Map<String, String> MAP_BACK_KEY_BEHAVIOUR = orderedPropertyValues(values -> {
+        values.put(IVALUE_BACK_KEY_BEHAVIOUR_BACK, IVALUE_BACK_KEY_BEHAVIOUR_BACK);
+        values.put(IVALUE_BACK_KEY_BEHAVIOUR_ESCAPE, IVALUE_BACK_KEY_BEHAVIOUR_ESCAPE);
+    });
 
 
 
@@ -342,13 +266,12 @@ public final class TermuxPropertyConstants {
     public static final String IVALUE_NIGHT_MODE_SYSTEM = NightMode.SYSTEM.getName();
     public static final String DEFAULT_IVALUE_NIGHT_MODE = IVALUE_NIGHT_MODE_SYSTEM;
 
-    /** Defines the bidirectional map for {@link NightMode} values and their internal values */
-    public static final ImmutableBiMap<String, String> MAP_NIGHT_MODE =
-        new ImmutableBiMap.Builder<String, String>()
-            .put(IVALUE_NIGHT_MODE_TRUE, IVALUE_NIGHT_MODE_TRUE)
-            .put(IVALUE_NIGHT_MODE_FALSE, IVALUE_NIGHT_MODE_FALSE)
-            .put(IVALUE_NIGHT_MODE_SYSTEM, IVALUE_NIGHT_MODE_SYSTEM)
-            .build();
+    /** Maps {@link NightMode} values to their internal values. */
+    public static final Map<String, String> MAP_NIGHT_MODE = orderedPropertyValues(values -> {
+        values.put(IVALUE_NIGHT_MODE_TRUE, IVALUE_NIGHT_MODE_TRUE);
+        values.put(IVALUE_NIGHT_MODE_FALSE, IVALUE_NIGHT_MODE_FALSE);
+        values.put(IVALUE_NIGHT_MODE_SYSTEM, IVALUE_NIGHT_MODE_SYSTEM);
+    });
 
 
 
@@ -359,12 +282,11 @@ public final class TermuxPropertyConstants {
     public static final String IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_ENABLE_DISABLE = "enable/disable";
     public static final String DEFAULT_IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR = IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_SHOW_HIDE;
 
-    /** Defines the bidirectional map for toggle soft keyboard behaviour values and their internal values */
-    public static final ImmutableBiMap<String, String> MAP_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR =
-        new ImmutableBiMap.Builder<String, String>()
-            .put(IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_SHOW_HIDE, IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_SHOW_HIDE)
-            .put(IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_ENABLE_DISABLE, IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_ENABLE_DISABLE)
-            .build();
+    /** Maps toggle soft keyboard behaviour values to their internal values. */
+    public static final Map<String, String> MAP_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR = orderedPropertyValues(values -> {
+        values.put(IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_SHOW_HIDE, IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_SHOW_HIDE);
+        values.put(IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_ENABLE_DISABLE, IVALUE_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR_ENABLE_DISABLE);
+    });
 
 
 
@@ -375,12 +297,11 @@ public final class TermuxPropertyConstants {
     public static final String IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME = "volume";
     public static final String DEFAULT_IVALUE_VOLUME_KEYS_BEHAVIOUR = IVALUE_VOLUME_KEY_BEHAVIOUR_VIRTUAL;
 
-    /** Defines the bidirectional map for volume keys behaviour values and their internal values */
-    public static final ImmutableBiMap<String, String> MAP_VOLUME_KEYS_BEHAVIOUR =
-        new ImmutableBiMap.Builder<String, String>()
-            .put(IVALUE_VOLUME_KEY_BEHAVIOUR_VIRTUAL, IVALUE_VOLUME_KEY_BEHAVIOUR_VIRTUAL)
-            .put(IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME, IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME)
-            .build();
+    /** Maps volume keys behaviour values to their internal values. */
+    public static final Map<String, String> MAP_VOLUME_KEYS_BEHAVIOUR = orderedPropertyValues(values -> {
+        values.put(IVALUE_VOLUME_KEY_BEHAVIOUR_VIRTUAL, IVALUE_VOLUME_KEY_BEHAVIOUR_VIRTUAL);
+        values.put(IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME, IVALUE_VOLUME_KEY_BEHAVIOUR_VOLUME);
+    });
 
 
 
@@ -403,7 +324,6 @@ public final class TermuxPropertyConstants {
         KEY_USE_CTRL_SPACE_WORKAROUND,
         KEY_USE_FULLSCREEN,
         KEY_USE_FULLSCREEN_WORKAROUND,
-        TermuxConstants.PROP_ALLOW_EXTERNAL_APPS,
 
         /* int */
         KEY_BELL_BEHAVIOUR,
@@ -448,8 +368,7 @@ public final class TermuxPropertyConstants {
         KEY_TERMINAL_ONCLICK_URL_OPEN,
         KEY_USE_CTRL_SPACE_WORKAROUND,
         KEY_USE_FULLSCREEN,
-        KEY_USE_FULLSCREEN_WORKAROUND,
-        TermuxConstants.PROP_ALLOW_EXTERNAL_APPS
+        KEY_USE_FULLSCREEN_WORKAROUND
     ));
 
     /** Defines the set for keys loaded by termux that have default boolean behaviour with true as default.

@@ -34,8 +34,6 @@ public interface TerminalViewClient {
 
     boolean shouldUseCtrlSpaceWorkaround();
 
-    boolean isTerminalViewSelected();
-
 
 
     void copyModeChanged(boolean copyMode);

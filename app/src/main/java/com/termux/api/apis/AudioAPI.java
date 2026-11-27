@@ -8,7 +8,6 @@ import android.media.AudioTrack;
 import android.os.Build;
 import android.util.JsonWriter;
 
-import androidx.annotation.RequiresApi;
 
 import com.termux.api.TermuxApiReceiver;
 import com.termux.api.util.ResultReturner;
@@ -18,7 +17,6 @@ public class AudioAPI {
 
     private static final String LOG_TAG = "AudioAPI";
 
-    @RequiresApi(Build.VERSION_CODES.M)
     public static void onReceive(TermuxApiReceiver apiReceiver, final Context context, Intent intent) {
         Logger.logDebug(LOG_TAG, "onReceive");
 

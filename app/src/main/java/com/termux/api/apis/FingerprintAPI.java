@@ -3,7 +3,6 @@ package com.termux.api.apis;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.fingerprint.FingerprintManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,7 +10,6 @@ import android.util.JsonWriter;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
@@ -41,7 +39,6 @@ public class FingerprintAPI {
     protected static final int MAX_ATTEMPTS   = 5;
 
     // error constants
-    protected static final String ERROR_UNSUPPORTED_OS_VERSION    = "ERROR_UNSUPPORTED_OS_VERSION";
     protected static final String ERROR_NO_HARDWARE               = "ERROR_NO_HARDWARE";
     protected static final String ERROR_NO_ENROLLED_FINGERPRINTS  = "ERROR_NO_ENROLLED_FINGERPRINTS";
     protected static final String ERROR_KEY_GENERATOR             = "ERROR_KEY_GENERATOR";
@@ -69,7 +66,6 @@ public class FingerprintAPI {
     /**
      * Handles setup of fingerprint sensor and writes Fingerprint result to console
      */
-    @RequiresApi(Build.VERSION_CODES.N)
     public static void onReceive(final Context context, final Intent intent) {
         Logger.logDebug(LOG_TAG, "onReceive");
 
@@ -118,7 +114,6 @@ public class FingerprintAPI {
     /**
      * Ensure that we have a fingerprint sensor and that the user has already enrolled fingerprints
      */
-    @RequiresApi(Build.VERSION_CODES.M)
     protected static boolean validateFingerprintSensor(Context context, FingerprintManager fingerprintManager) {
         boolean result = true;
 
@@ -150,12 +145,6 @@ public class FingerprintAPI {
             Logger.logDebug(LOG_TAG, "onCreate");
 
             super.onCreate(savedInstanceState);
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                FingerprintResult result = new FingerprintResult();
-                result.errors.add(ERROR_UNSUPPORTED_OS_VERSION);
-                postFingerprintResult(this, getIntent(), result);
-                return;
-            }
             handleFingerprint();
         }
 

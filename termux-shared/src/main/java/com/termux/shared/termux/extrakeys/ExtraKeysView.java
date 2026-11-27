@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.stream.Collectors;
 
 import android.view.HapticFeedbackConstants;
-import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -31,48 +30,12 @@ import android.widget.PopupWindow;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.android.material.button.MaterialButton;
+import android.widget.Button;
 import com.termux.shared.R;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.shared.theme.ThemeUtils;
 
-/**
- * A {@link View} showing extra keys (such as Escape, Ctrl, Alt) not normally available on an Android soft
- * keyboards.
- *
- * To use it, add following to a layout file and import it in your activity layout file or inflate
- * it with a {@link androidx.viewpager.widget.ViewPager}.:
- * {@code
- * <?xml version="1.0" encoding="utf-8"?>
- * <com.termux.shared.termux.extrakeys.ExtraKeysView xmlns:android="http://schemas.android.com/apk/res/android"
- *     android:id="@+id/extra_keys"
- *     style="?android:attr/buttonBarStyle"
- *     android:layout_width="match_parent"
- *     android:layout_height="match_parent"
- *     android:layout_alignParentBottom="true"
- *     android:orientation="horizontal" />
- * }
- *
- * Then in your activity, get its reference by a call to {@link android.app.Activity#findViewById(int)}
- * or {@link LayoutInflater#inflate(int, ViewGroup)} if using {@link androidx.viewpager.widget.ViewPager}.
- * Then call {@link #setExtraKeysViewClient(IExtraKeysView)} and pass it the implementation of
- * {@link IExtraKeysView} so that you can receive callbacks. You can also override other values set
- * in {@link ExtraKeysView#ExtraKeysView(Context, AttributeSet)} by calling the respective functions.
- * If you extend {@link ExtraKeysView}, you can also set them in the constructor, but do call super().
- *
- * After this you will have to make a call to {@link ExtraKeysView#reload(ExtraKeysInfo, float) and pass
- * it the {@link ExtraKeysInfo} to load and display the extra keys. Read its class javadocs for more
- * info on how to create it.
- *
- * Termux app defines the view in res/layout/view_terminal_toolbar_extra_keys and
- * inflates it in TerminalToolbarViewPager.instantiateItem() and sets the {@link ExtraKeysView} client
- * and calls {@link ExtraKeysView#reload(ExtraKeysInfo).
- * The {@link ExtraKeysInfo} is created by TermuxAppSharedProperties.setExtraKeys().
- * Then its got and the view height is adjusted in TermuxActivity.setTerminalToolbarHeight().
- * The client used is TermuxTerminalExtraKeys, which extends
- * {@link TerminalExtraKeys } to handle Termux app specific logic and
- * leave the rest to the super class.
- */
+/** A grid for terminal keys and locked modifiers absent from most software keyboards. */
 public final class ExtraKeysView extends GridLayout {
 
     /** The client for the {@link ExtraKeysView}. */
@@ -88,23 +51,23 @@ public final class ExtraKeysView extends GridLayout {
          * @param buttonInfo The {@link ExtraKeyButton} for the button that was clicked.
          *                   The button may be a {@link ExtraKeyButton#KEY_MACRO} set which can be
          *                   checked with a call to {@link ExtraKeyButton#isMacro()}.
-         * @param button The {@link MaterialButton} that was clicked.
+         * @param button The {@link Button} that was clicked.
          */
-        void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, MaterialButton button);
+        void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, Button button);
 
         /**
          * This is called by {@link ExtraKeysView} when a button is clicked so that the client
-         * can perform any hepatic feedback. This is only called in the {@link MaterialButton.OnClickListener}
+         * can perform any hepatic feedback. This is only called in the {@link Button.OnClickListener}
          * and not for every repeat. Its also called for {@link #mSpecialButtons}.
          *
          * @param view The view that was clicked.
          * @param buttonInfo The {@link ExtraKeyButton} for the button that was clicked.
-         * @param button The {@link MaterialButton} that was clicked.
+         * @param button The {@link Button} that was clicked.
          * @return Return {@code true} if the client handled the feedback, otherwise {@code false}
-         * so that {@link ExtraKeysView#performExtraKeyButtonHapticFeedback(View, ExtraKeyButton, MaterialButton)}
+         * so that {@link ExtraKeysView#performExtraKeyButtonHapticFeedback(View, ExtraKeyButton, Button)}
          * can handle it depending on system settings.
          */
-        boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, MaterialButton button);
+        boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, Button button);
 
     }
 
@@ -159,7 +122,7 @@ public final class ExtraKeysView extends GridLayout {
 
     /**
      * The list of keys for which auto repeat of key should be triggered if its extra keys button
-     * is long pressed. This is done by calling {@link IExtraKeysView#onExtraKeyButtonClick(View, ExtraKeyButton, MaterialButton)}
+     * is long pressed. This is done by calling {@link IExtraKeysView#onExtraKeyButtonClick(View, ExtraKeyButton, Button)}
      * every {@link #mLongPressRepeatDelay} seconds after {@link #mLongPressTimeout} has passed.
      * The default keys are defined by {@link ExtraKeysConstants#PRIMARY_REPETITIVE_KEYS}.
      */
@@ -383,7 +346,7 @@ public final class ExtraKeysView extends GridLayout {
      *                 be a single child.
      */
     @SuppressLint("ClickableViewAccessibility")
-    public void reload(ExtraKeysInfo extraKeysInfo, float heightPx) {
+    public void reload(ExtraKeysInfo extraKeysInfo) {
         if (extraKeysInfo == null)
             return;
 
@@ -401,16 +364,16 @@ public final class ExtraKeysView extends GridLayout {
             for (int col = 0; col < buttons[row].length; col++) {
                 final ExtraKeyButton buttonInfo = buttons[row][col];
 
-                MaterialButton button;
+                Button button;
                 if (isSpecialButton(buttonInfo)) {
                     button = createSpecialButton(buttonInfo.getKey(), true);
                     if (button == null) return;
                 } else {
-                    button = new MaterialButton(getContext(), null, android.R.attr.buttonBarButtonStyle);
+                    button = new Button(getContext(), null, android.R.attr.borderlessButtonStyle);
+                    button.setTextColor(mButtonTextColor);
                 }
-
+                button.setBackgroundColor(mButtonBackgroundColor);
                 button.setText(buttonInfo.getDisplay());
-                button.setTextColor(mButtonTextColor);
                 button.setAllCaps(mButtonTextAllCaps);
                 button.setPadding(0, 0, 0, 0);
 
@@ -471,11 +434,7 @@ public final class ExtraKeysView extends GridLayout {
 
                 LayoutParams param = new GridLayout.LayoutParams();
                 param.width = 0;
-                if(Build.VERSION.SDK_INT == Build.VERSION_CODES.LOLLIPOP) {
-                   param.height = (int)(heightPx + 0.5);
-                } else {
-                    param.height = 0;
-                }
+                param.height = 0;
                 param.setMargins(0, 0, 0, 0);
                 param.columnSpec = GridLayout.spec(col, GridLayout.FILL, 1.f);
                 param.rowSpec = GridLayout.spec(row, GridLayout.FILL, 1.f);
@@ -488,12 +447,12 @@ public final class ExtraKeysView extends GridLayout {
 
 
 
-    public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+    public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, Button button) {
         if (mExtraKeysViewClient != null)
             mExtraKeysViewClient.onExtraKeyButtonClick(view, buttonInfo, button);
     }
 
-    public void performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+    public void performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, Button button) {
         if (mExtraKeysViewClient != null) {
             // If client handled the feedback, then just return
             if (mExtraKeysViewClient.performExtraKeyButtonHapticFeedback(view, buttonInfo, button))
@@ -516,7 +475,7 @@ public final class ExtraKeysView extends GridLayout {
 
 
 
-    public void onAnyExtraKeyButtonClick(View view, @NonNull ExtraKeyButton buttonInfo, MaterialButton button) {
+    public void onAnyExtraKeyButtonClick(View view, @NonNull ExtraKeyButton buttonInfo, Button button) {
         if (isSpecialButton(buttonInfo)) {
             if (mLongPressCount > 0) return;
             SpecialButtonState state = mSpecialButtons.get(SpecialButton.valueOf(buttonInfo.getKey()));
@@ -532,7 +491,7 @@ public final class ExtraKeysView extends GridLayout {
     }
 
 
-    public void startScheduledExecutors(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
+    public void startScheduledExecutors(View view, ExtraKeyButton buttonInfo, Button button) {
         stopScheduledExecutors();
         mLongPressCount = 0;
         if (mRepetitiveKeys.contains(buttonInfo.getKey())) {
@@ -589,12 +548,12 @@ public final class ExtraKeysView extends GridLayout {
     void showPopup(View view, ExtraKeyButton extraButton) {
         int width = view.getMeasuredWidth();
         int height = view.getMeasuredHeight();
-        MaterialButton button;
+        Button button;
         if (isSpecialButton(extraButton)) {
             button = createSpecialButton(extraButton.getKey(), false);
             if (button == null) return;
         } else {
-            button = new MaterialButton(getContext(), null, android.R.attr.buttonBarButtonStyle);
+            button = new Button(getContext(), null, android.R.attr.borderlessButtonStyle);
             button.setTextColor(mButtonTextColor);
         }
         button.setText(extraButton.getDisplay());
@@ -654,11 +613,11 @@ public final class ExtraKeysView extends GridLayout {
         return true;
     }
 
-    public MaterialButton createSpecialButton(String buttonKey, boolean needUpdate) {
+    public Button createSpecialButton(String buttonKey, boolean needUpdate) {
         SpecialButtonState state = mSpecialButtons.get(SpecialButton.valueOf(buttonKey));
         if (state == null) return null;
         state.setIsCreated(true);
-        MaterialButton button = new MaterialButton(getContext(), null, android.R.attr.buttonBarButtonStyle);
+        Button button = new Button(getContext(), null, android.R.attr.borderlessButtonStyle);
         button.setTextColor(state.isActive ? mButtonActiveTextColor : mButtonTextColor);
         if (needUpdate) {
             state.buttons.add(button);

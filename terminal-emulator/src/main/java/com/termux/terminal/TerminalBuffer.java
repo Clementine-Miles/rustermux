@@ -53,7 +53,7 @@ public final class TerminalBuffer {
      *
      * The bitmap number and coordinates are encoded in the `long` {@link TerminalRow#mStyle} for
      * the `TerminalRow` character of a column by
-     * {@link TerminalBitmap#buildOrThrow(TerminalBuffer, int, Bitmap, int, int, int, int)} by
+     * {@link TerminalBitmap} by
      * getting encoded value from {@link TextStyle#encodeTerminalBitmap(int, int, int)}.
      * The `TerminalRenderer.render()` then checks during rendering terminal output whether a
      * character at a row/coloumn index is a bitmap instead of text by calling
@@ -570,7 +570,7 @@ public final class TerminalBuffer {
 
 
 
-    public synchronized TerminalBitmap getTerminalBitmap(long style) {
+    private TerminalBitmap getTerminalBitmap(long style) {
         int bitmapNum = TextStyle.getTerminalBitmapNum(style);
         return bitmapNum >= TERMINAL_BITMAP__NUM_START ? mTerminalBitmaps.get(bitmapNum): null;
     }
@@ -616,7 +616,7 @@ public final class TerminalBuffer {
 
         TerminalBitmap terminalBitmap = TerminalBitmap.build(this, bitmapNum, mTerminalSixel, x, y, cellW, cellH);
         mTerminalSixel = null;
-        if (terminalBitmap == null || terminalBitmap.getBitmap() == null) {
+        if (terminalBitmap == null || terminalBitmap.mBitmap == null) {
             return 0;
         }
         mTerminalBitmaps.put(bitmapNum, terminalBitmap);
@@ -685,25 +685,6 @@ public final class TerminalBuffer {
             }
         }
         return bitmapNum;
-    }
-
-
-    public synchronized int[] addTerminalBitmapForImage(byte[] image, int x, int y, int cellW, int cellH, int width, int height, boolean shouldPreserveAspectRatio) {
-        int bitmapNum = getFreeTerminalBitmapNum();
-        if (bitmapNum < TERMINAL_BITMAP__NUM_START) {
-            Logger.logError(mClient, LOG_TAG, "Cannot create more than " + TERMINAL_BITMAP__NUM_END + " bitmaps");
-            return new int[] {0, 0};
-        }
-
-        TerminalBitmap terminalBitmap = TerminalBitmap.build(this, bitmapNum, image, x, y,
-            cellW, cellH, width, height, shouldPreserveAspectRatio);
-        if (terminalBitmap == null || terminalBitmap.getBitmap() == null) {
-            return new int[] {0, 0};
-        }
-        mTerminalBitmaps.put(bitmapNum, terminalBitmap);
-
-        doTerminalBitmapsGC(30000);
-        return terminalBitmap.mCursorDelta;
     }
 
 

@@ -1,0 +1,39 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Install Android SDK packages
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0' 'ndk;29.0.14206865'
+      - name: Build, test, and lint
+        run: ./gradlew :app:assembleDebug test lintDebug :termux-shared:assembleDebugAndroidTest
+      - name: Verify and inspect the ARM64 APK
+        run: |
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$build_tools/apksigner" verify "$apk"
+          "$build_tools/zipalign" -c -P 16 4 "$apk"
+          python3 tools/verify_apk.py "$apk"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rustermux-arm64-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

@@ -7,7 +7,6 @@ import android.location.LocationManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.os.Build;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.util.JsonWriter;
@@ -93,38 +92,36 @@ public class WifiAPI {
                         if (!TextUtils.isEmpty(scan.capabilities)) {
                             out.name("capabilities").value(scan.capabilities);
                         }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            int channelWidth = scan.channelWidth;
-                            String channelWidthMhz;
-                            switch (channelWidth) {
-                                case ScanResult.CHANNEL_WIDTH_20MHZ:
-                                    channelWidthMhz = "20";
-                                    break;
-                                case ScanResult.CHANNEL_WIDTH_40MHZ:
-                                    channelWidthMhz = "40";
-                                    break;
-                                case ScanResult.CHANNEL_WIDTH_80MHZ:
-                                    channelWidthMhz = "80";
-                                    break;
-                                case ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ:
-                                    channelWidthMhz = "80+80";
-                                    break;
-                                case ScanResult.CHANNEL_WIDTH_160MHZ:
-                                    channelWidthMhz = "160";
-                                    break;
-                                default:
-                                    channelWidthMhz = "???";
-                            }
-                            out.name("channel_bandwidth_mhz").value(channelWidthMhz);
-                            if (channelWidth != ScanResult.CHANNEL_WIDTH_20MHZ) {
-                                out.name("center_frequency_mhz").value(scan.centerFreq0);
-                            }
-                            if (!TextUtils.isEmpty(scan.operatorFriendlyName)) {
-                                out.name("operator_name").value(scan.operatorFriendlyName.toString());
-                            }
-                            if (!TextUtils.isEmpty(scan.venueName)) {
-                                out.name("venue_name").value(scan.venueName.toString());
-                            }
+                        int channelWidth = scan.channelWidth;
+                        String channelWidthMhz;
+                        switch (channelWidth) {
+                            case ScanResult.CHANNEL_WIDTH_20MHZ:
+                                channelWidthMhz = "20";
+                                break;
+                            case ScanResult.CHANNEL_WIDTH_40MHZ:
+                                channelWidthMhz = "40";
+                                break;
+                            case ScanResult.CHANNEL_WIDTH_80MHZ:
+                                channelWidthMhz = "80";
+                                break;
+                            case ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ:
+                                channelWidthMhz = "80+80";
+                                break;
+                            case ScanResult.CHANNEL_WIDTH_160MHZ:
+                                channelWidthMhz = "160";
+                                break;
+                            default:
+                                channelWidthMhz = "???";
+                        }
+                        out.name("channel_bandwidth_mhz").value(channelWidthMhz);
+                        if (channelWidth != ScanResult.CHANNEL_WIDTH_20MHZ) {
+                            out.name("center_frequency_mhz").value(scan.centerFreq0);
+                        }
+                        if (!TextUtils.isEmpty(scan.operatorFriendlyName)) {
+                            out.name("operator_name").value(scan.operatorFriendlyName.toString());
+                        }
+                        if (!TextUtils.isEmpty(scan.venueName)) {
+                            out.name("venue_name").value(scan.venueName.toString());
                         }
                         out.endObject();
                     }
